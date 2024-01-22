@@ -1,10 +1,14 @@
+# This experiment simply outputs an annotated texts with level-coded annotations
+
 import sys
 sys.path.append('source')
 import helpers
 import api
 
-output_path = "res/annotated_sample.html"
+output_path = "results/annotated_sample.html"
+text = "But the only thing that I didn't like was the weather"
 
-text = "I would like to apologise for not being able to attend on Friday 13th June for my visit."
 annotations = api.get_annotations(text)
 helpers.html_from_annotations([], text, annotations, output_path) 
+
+# Write a function that calculates the fibonacci number n

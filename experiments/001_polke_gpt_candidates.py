@@ -1,3 +1,4 @@
+# This experiment outputs annotated candidate responses from OpenAIs GPT3.5 with level-coded annotations
 
 import sys
 sys.path.append('source')
@@ -29,7 +30,7 @@ messages = [
     "content": "Yeah, that is what the holiday is for, isn't it?"
     }
 ]
-output_path = 'res/construct_highlighter.html'
+output_path = 'results/construct_highlighter.html'
 
 # LOGIC
 text = "\n\n".join(api.get_response(messages, n=num_responses))
