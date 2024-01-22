@@ -1,0 +1,4 @@
+.env
+data/DuoLingoSLAM
+data/EFCAMDAT_Database.xml
+**__pycache__**

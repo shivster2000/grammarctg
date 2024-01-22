@@ -1,0 +1,8 @@
+#Person1#: Tell me something about your Valentine's Day.
+#Person2#: Ok, on that day, boys usually give roses to the sweet hearts and girls give them chocolate in return.
+#Person1#: So romantic. young people must have lot of fun.
+#Person2#: Yeah, that is what the holiday is for, isn't it?
+
+#ChatGPT response:
+Yes, Valentine's Day is often seen as a romantic and festive day for young people and couples to express their love and enjoy special moments together.
+
