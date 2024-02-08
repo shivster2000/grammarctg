@@ -1,4 +1,4 @@
-# This experiment outputs annotated candidate responses from OpenAIs GPT3.5 with level-coded annotations
+# Exp 001: This experiment outputs annotated candidate responses from OpenAIs GPT3.5 with level-coded annotations
 
 import sys
 sys.path.append('source')

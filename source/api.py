@@ -4,12 +4,12 @@ from openai import OpenAI
 import requests
 
 client = OpenAI()
-def get_response(messages, n=1, temperature=1):
+def get_response(messages, n=1, temperature=1, max_tokens=128):
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=messages,
         temperature=temperature,
-        max_tokens=128,
+        max_tokens=max_tokens,
         top_p=1,
         frequency_penalty=0,
         presence_penalty=0,
