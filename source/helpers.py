@@ -30,6 +30,12 @@ cefr_levels_to_colors = {
     "C2": "#FF0000"   # Red
 }
 
+def get_egp():
+    egp = pd.read_excel('../data/English Grammar Profile Online.xlsx')
+    # remove learner information from examples
+    egp['Example'] = egp['Example'].str.replace(r"\(.*\)", "", regex=True).str.strip()
+    return egp
+
 # functions
 def map_egp_id(file_path='data/egp_list.xlsx', sheet_name='English Vocabulary Profile'):
     # Read the Excel file

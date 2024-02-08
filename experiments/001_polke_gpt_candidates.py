@@ -33,6 +33,6 @@ messages = [
 output_path = 'results/construct_highlighter.html'
 
 # LOGIC
-text = "\n\n".join(api.get_response(messages, n=num_responses))
+text = "\n\n".join(api.get_openai_chat_completion(messages, n=num_responses))
 annotations = api.get_annotations(text)
 helpers.html_from_annotations(messages, text, annotations, output_path) 

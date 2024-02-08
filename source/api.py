@@ -1,12 +1,13 @@
 from dotenv import load_dotenv
+import os
 load_dotenv()
 from openai import OpenAI
 import requests
 
 client = OpenAI()
-def get_response(messages, n=1, temperature=1, max_tokens=128):
+def get_openai_chat_completion(messages, model=os.getenv("OPENAI_DEFAULT_MODEL"), n=1, temperature=1, max_tokens=128):
     response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
+        model=model,
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
