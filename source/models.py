@@ -39,8 +39,44 @@ class MultiTaskBERT(torch.nn.Module):
         task_outputs = torch.stack([self.task_heads[task_id](pooled_output) for task_id in range(len(self.task_heads))])
         return (task_outputs[:,:,1] - task_outputs[:,:,0]).transpose(0, 1)
 
+class RuleDetector(torch.nn.Module):
+    def __init__(self, bert_encoder, hidden_dim=32, dropout_rate=0.25, train_bert=False):
+        super().__init__()
+        self.bert = bert_encoder
+        for param in self.bert.parameters():
+            param.requires_grad = train_bert
+        input_dim = self.bert.config.hidden_size*(self.bert.config.num_hidden_layers+1)
+        self.dropout = torch.nn.Dropout(dropout_rate).to(device)
+        self.hidden = torch.nn.Linear(input_dim, hidden_dim).to(device)
+        self.relu = torch.nn.ReLU().to(device)
+        self.output = torch.nn.Linear(hidden_dim, 1).to(device)
+        self.sigmoid = torch.nn.Sigmoid().to(device)
+    
+    def forward(self, input_ids, attention_mask, diagnose=False):
+        with torch.no_grad():
+            outputs = self.bert(input_ids, attention_mask)
+            x = torch.cat(outputs.hidden_states, dim=-1)
+        if diagnose:
+            print(x.shape)
+        x = self.dropout(x)
+        x = self.hidden(x)
+        if diagnose:
+            print(x.shape)
+        x = self.relu(x)
+        x = self.output(x)
+        x = self.sigmoid(x)
+        if diagnose:
+            print(x)
+        x = x * attention_mask.unsqueeze(-1)
+        if diagnose:
+            print(x)
+        
+        max_values, max_indices = torch.max(x, 1)
+        return max_values.flatten(), max_indices.flatten()
+
 bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', cache_dir=os.getenv('CACHE_DIR'))
-backbone_model = BertModel.from_pretrained('bert-base-uncased', cache_dir=os.getenv('CACHE_DIR'))
+backbone_model = BertModel.from_pretrained('bert-base-uncased', cache_dir=os.getenv('CACHE_DIR'), output_hidden_states=True).to(device)
+bert_encoder = backbone_model
 
 def load_model(level, egp_df):  
     df_level = egp_df[egp_df['Level'] == level]
@@ -77,3 +113,45 @@ def get_scores(level_model, candidates, max_len=128, batch_size=128, use_tqdm=Fa
             all_outputs.append(outputs)
     
     return torch.cat(all_outputs, dim=0)
+
+def train(model, train_dataloader, val_dataloader, num_epochs=3, lr=1e-4, criterion = torch.nn.BCELoss(), optimizer = None):
+    if optimizer is None: optimizer = torch.optim.AdamW(model.parameters(), lr)
+    for epoch in range(num_epochs):
+        model.train()
+        total_loss = 0
+        
+        for batch in tqdm(train_dataloader):
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device)
+
+            values, _ = model(input_ids, attention_mask=attention_mask, diagnose=False)
+            loss = criterion(values, labels.float())
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+
+            total_loss += loss.item()
+
+        avg_train_loss = total_loss / len(train_dataloader)
+        print(f'Training loss: {avg_train_loss}')
+
+        # Validation phase
+        model.eval() 
+        total_correct = 0
+        total_examples = 0
+        
+        with torch.no_grad():  # No gradients needed for validation
+            for batch in val_dataloader:
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['labels'].to(device)
+    
+                outputs, _ = model(input_ids, attention_mask)
+                predictions = outputs > 0.5                
+                total_correct += (predictions.flatten() == labels).sum().item()
+                total_examples += labels.size(0)
+
+        accuracy = total_correct / total_examples
+        print(f'Accuracy: {accuracy}')
+    return optimizer

@@ -1,6 +1,7 @@
 import pandas as pd
 import webbrowser
 import os
+import re
 
 # constants
 head = """
@@ -29,6 +30,25 @@ cefr_levels_to_colors = {
     "C1": "#FF4500",  # Orange-Red
     "C2": "#FF0000"   # Red
 }
+
+SYSTEM_MESSAGE = {"role": "system", "content": "You are a helpful assistant."}
+
+def get_prompt(construction, n_examples=5, mark_words=True):
+    lexical_range = ''
+    if not pd.isna(construction["Lexical Range"]):
+        if construction["Lexical Range"] == 1:
+            lexical_range = 'low'
+        elif construction["Lexical Range"] == 2:
+            lexical_range = 'medium'
+        elif construction["Lexical Range"] == 3:
+            lexical_range = 'high'
+        lexical_range = f'Use words of {lexical_range} difficulty in the rule.'
+    prompt = f'Learn the grammar rule "{construction["Can-do statement"]}" ({construction["SuperCategory"]}, {construction["SubCategory"]}, {construction["guideword"]}). It is CEFR level {construction["Level"]}. {lexical_range}\nExamples:\n{construction["Example"]}\n'
+    if n_examples > 0:
+        prompt += f'Create {n_examples} more examples using that rule.'
+    if mark_words:
+        prompt += 'Mark the words that are fulfilling it in **bold**.'
+    return prompt
 
 def get_egp():
     egp = pd.read_excel('../data/English Grammar Profile Online.xlsx')
@@ -89,3 +109,12 @@ def html_from_annotations(messages, text, annotation_list, output_path, open_in_
         file.write(html_text)
     if open_in_browser:
         webbrowser.open('file://' + os.path.realpath(output_path))
+
+def get_bolds(example):
+    return re.findall(r"\*\*(.*?)\*\*", example)
+
+def parse_response(response, positive=True):
+    matches = re.findall(r"^\d+\.\s+(.*)", response, re.MULTILINE)
+    examples = [match for match in matches]
+    bolds = [get_bolds(example) for example in examples]
+    return examples, bolds

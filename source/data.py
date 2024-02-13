@@ -1,6 +1,9 @@
 import pandas as pd
 from nltk.tokenize import sent_tokenize
 import re
+import random
+import torch
+from torch.utils.data import Dataset, DataLoader, random_split
 
 def flatten_list_of_lists(list_of_lists):
     return [item for sublist in list_of_lists for item in sublist]
@@ -57,3 +60,56 @@ class DailyDialog(DialogData):
         # Replace spaces surrounding an apostrophe
         utterance = re.sub(r'\s+’\s+', "'", utterance)
         return utterance.strip()
+
+class SentenceDataset(Dataset):
+    def __init__(self, sentences, labels, tokenizer, max_len):
+        self.sentences = sentences
+        self.labels = labels
+        self.tokenizer = tokenizer
+        self.max_len = max_len
+
+    def __len__(self):
+        return len(self.sentences)
+
+    def __getitem__(self, idx):
+        encoding = self.tokenizer(self.sentences[idx], return_tensors='pt', max_length=self.max_len, padding='max_length')
+        return {
+            'input_ids': encoding['input_ids'].flatten(),
+            'attention_mask': encoding['attention_mask'].flatten(),
+            'labels': torch.tensor(self.labels[idx], dtype=torch.long)
+        }
+    
+def get_dataset(positive_examples, negative_examples, others, tokenizer, max_len, random_negatives=True, ratio = 0.5, max_positive_examples=500):
+    # assemble dataset for one construction
+    # 50% positive examples
+    unique_examples = list(set(positive_examples))
+    sentences = unique_examples[:max_positive_examples]
+    labels = [1] * len(sentences)
+
+    num_augs = int(len(sentences) * (1-ratio)) if random_negatives else len(sentences)
+    # augmented negative examples
+    aug_neg_examples = list(set(negative_examples).difference(set(positive_examples)))
+    random.shuffle(aug_neg_examples)
+    unique_negatives = aug_neg_examples[:num_augs]
+    sentences += unique_negatives
+    labels += [0] * len(unique_negatives)
+    
+    if random_negatives:
+        num_rands = max_positive_examples - len(unique_negatives) # fill to an even number
+        # rest: random negative examples (positive from other constructions)
+        neg_examples = others
+        random.shuffle(neg_examples)
+        sentences += neg_examples[:num_rands]
+        labels += [0] * len(neg_examples[:num_rands])
+    #assert len(sentences) == 2 * max_positive_examples
+    #assert sum(labels) == max_positive_examples
+    return SentenceDataset(sentences, labels, tokenizer, max_len)
+
+def get_loaders(dataset, batch_size=32):
+    total_size = len(dataset)
+    train_size = int(0.8 * total_size)
+    val_size = total_size - train_size
+    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    return train_dataloader, val_dataloader
