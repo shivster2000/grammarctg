@@ -1,7 +1,9 @@
 .env
 data/DuoLingoSLAM
 data/EFCAMDAT_Database.xml
+data/egp_examples.json
 **__pycache__**
 **cambridge.smille**
 cloud.txt
 /models
+**/.ipynb_checkpoints
