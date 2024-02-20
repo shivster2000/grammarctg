@@ -54,6 +54,10 @@ def get_egp():
     egp = pd.read_excel('../data/English Grammar Profile Online.xlsx')
     # remove learner information from examples
     egp['Example'] = egp['Example'].str.replace(r"\(.*\)", "", regex=True).str.strip()
+    egp['Type'] = egp['guideword'].apply(lambda x: 'FORM/USE' if 'FORM/USE' in x 
+                                         else 'USE' if 'USE' in x 
+                                         else 'FORM' if 'FORM' in x 
+                                         else x)
     return egp
 
 # functions

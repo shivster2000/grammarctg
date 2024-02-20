@@ -3,7 +3,9 @@ from nltk.tokenize import sent_tokenize
 import re
 import random
 import torch
+from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader, random_split
+import json
 
 def flatten_list_of_lists(list_of_lists):
     return [item for sublist in list_of_lists for item in sublist]
@@ -60,6 +62,42 @@ class DailyDialog(DialogData):
         # Replace spaces surrounding an apostrophe
         utterance = re.sub(r'\s+’\s+', "'", utterance)
         return utterance.strip()
+
+
+class WoW(DialogData):
+    def __init__(self, file='../data/wow/train.json', n=None):
+        super().__init__(file)
+        self.n = n
+
+    def read_file(self):
+        with open(self.file, 'r') as file:
+            return json.load(file)
+
+    def get_dialogues(self):
+        dialogues = []
+        for dialogue in self.dialogues_raw[:self.n] if self.n is not None else self.dialogues_raw:
+            dialogue_texts = [turn['text'] for turn in dialogue['dialog']]
+            dialogues.append(dialogue_texts)
+        return dialogues
+
+def get_cefr_sentences(file="../data/cefr_leveled_texts.csv"):
+    texts = pd.read_csv(file)
+    texts["sentences"] = texts.text.apply(sent_tokenize)
+    texts = texts.dropna().explode("sentences")
+    return list(texts.sentences)
+
+def get_mixed_sentences(n_per_corpus=1000):
+    sentences = []
+    corpora = [DailyDialog, DialogSum, WoW]
+    for i, corpus in tqdm(enumerate(corpora), total=len(corpora)):
+        corpus_inst = corpus()
+        sentences += set(corpus_inst.get_all_sentences())
+        sentences = sentences[:(i+1)*n_per_corpus]
+    
+    sentences += get_cefr_sentences()
+    sentences = sentences[:(len(corpora)+1)*n_per_corpus]
+    random.shuffle(sentences)
+    return sentences
 
 class SentenceDataset(Dataset):
     def __init__(self, sentences, labels, tokenizer, max_len):

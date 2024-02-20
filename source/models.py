@@ -5,6 +5,7 @@ import os
 from tqdm import tqdm
 import copy
 import torch
+import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
 from transformers import BertTokenizer, BertModel
 
@@ -154,4 +155,25 @@ def train(model, train_dataloader, val_dataloader, num_epochs=3, lr=1e-4, criter
 
         accuracy = total_correct / total_examples
         print(f'Accuracy: {accuracy}')
-    return optimizer
+    return optimizer, accuracy
+
+def score_corpus(model, dataloader, max_positive=10, max_batches=10, threshold=0.5):
+    model.eval()
+    all_values = []
+    all_max_tokens = []
+    batches = 0
+    
+    with torch.no_grad():
+        for input_ids, attention_mask in tqdm(dataloader):
+            batches += 1
+            if batches > max_batches: break
+            tokens = [bert_tokenizer.convert_ids_to_tokens(ids) for ids in input_ids]
+            input_ids, attention_mask = input_ids.to(device), attention_mask.to(device)
+            
+            values, indices = model(input_ids, attention_mask)
+            max_tokens = [tokens[j][idx] if idx < len(tokens[j]) else '[PAD]' for j, idx in enumerate(indices.cpu().tolist())]
+
+            all_values.extend(values.cpu().tolist())
+            all_max_tokens.extend(max_tokens)
+            if np.sum(np.array(all_values)>threshold) > max_positive: break
+    return all_values, all_max_tokens

@@ -2,6 +2,7 @@
 data/DuoLingoSLAM
 data/EFCAMDAT_Database.xml
 data/egp_examples.json
+data/wow/
 **__pycache__**
 **cambridge.smille**
 cloud.txt
