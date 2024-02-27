@@ -157,6 +157,14 @@ def train(model, train_dataloader, val_dataloader, num_epochs=3, lr=1e-4, criter
         print(f'Accuracy: {accuracy}')
     return optimizer, accuracy
 
+def probe_model(model, probes):
+    encoded_input = bert_tokenizer(probes, return_tensors='pt', max_length=64, padding='max_length', truncation=True).to(device)
+    with torch.no_grad():
+        values, indices = model(encoded_input['input_ids'], encoded_input['attention_mask'], diagnose=False)
+    tokens = [bert_tokenizer.convert_ids_to_tokens(ids) for ids in encoded_input['input_ids']]
+    max_tokens = [token[indices[i]] for i, token in enumerate(tokens)]
+    return values.cpu(), max_tokens
+
 def score_corpus(model, dataloader, max_positive=10, max_batches=10, threshold=0.5):
     model.eval()
     all_values = []
@@ -177,3 +185,16 @@ def score_corpus(model, dataloader, max_positive=10, max_batches=10, threshold=0
             all_max_tokens.extend(max_tokens)
             if np.sum(np.array(all_values)>threshold) > max_positive: break
     return all_values, all_max_tokens
+
+def save_classifier(classifier, nr, dir):
+    trainable_params = {name: param for name, param in classifier.named_parameters() if param.requires_grad}
+    torch.save(trainable_params, f'../models/{dir}/{nr}.pth')
+
+def load_classifier(nr, dir):
+    trainable_params = torch.load(f'../models/{dir}/{nr}.pth')
+    classifier = RuleDetector(bert_encoder)
+    with torch.no_grad():
+        for name, param in classifier.named_parameters():
+            if name in trainable_params:
+                param.copy_(trainable_params[name])
+    return classifier
