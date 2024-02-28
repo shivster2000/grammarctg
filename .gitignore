@@ -3,8 +3,8 @@ data/DuoLingoSLAM
 data/EFCAMDAT_Database.xml
 data/egp_examples.json
 data/wow/
+data/egp_gpt35.json
 **__pycache__**
 **cambridge.smille**
 cloud.txt
-/models
 **/.ipynb_checkpoints
