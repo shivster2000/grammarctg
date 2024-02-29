@@ -14,6 +14,8 @@ from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader, random_split
 import json
 
+DATA_DIR ="../data/"
+
 def flatten_list_of_lists(list_of_lists):
     return [item for sublist in list_of_lists for item in sublist]
 
@@ -37,7 +39,7 @@ class DialogData:
         return filtered_sentences
 
 class DialogSum(DialogData):
-    def __init__(self, file="../data/DialogSum/dialogsum.train.jsonl"):
+    def __init__(self, file=f"{DATA_DIR}DialogSum/dialogsum.train.jsonl"):
         super().__init__(file)
 
     def read_file(self):
@@ -47,7 +49,7 @@ class DialogSum(DialogData):
         return self.dialogues_raw.dialogue.apply(lambda x: [utterance.split(': ', 1)[1] for utterance in x.split("\n")])
 
 class DailyDialog(DialogData):
-    def __init__(self, file='../data/dialogues_text.txt'):
+    def __init__(self, file=f"{DATA_DIR}dialogues_text.txt"):
         super().__init__(file)
 
     def read_file(self):
@@ -72,7 +74,7 @@ class DailyDialog(DialogData):
 
 
 class WoW(DialogData):
-    def __init__(self, file='../data/wow/train.json', n=None):
+    def __init__(self, file=f'{DATA_DIR}wow/train.json', n=None):
         super().__init__(file)
         self.n = n
 
@@ -87,23 +89,27 @@ class WoW(DialogData):
             dialogues.append(dialogue_texts)
         return dialogues
 
-def get_cefr_sentences(file="../data/cefr_leveled_texts.csv"):
-    texts = pd.read_csv(file)
-    texts["sentences"] = texts.text.apply(sent_tokenize)
-    texts = texts.dropna().explode("sentences")
-    return list(texts.sentences)
+class CEFRTexts():
+    def __init__(self, file=f"{DATA_DIR}cefr_leveled_texts.csv"):
+        self.texts = pd.read_csv(file)
+
+    def get_beginnings(self, min_length):
+        return self.texts.text.apply(lambda text: text[:text.find(' ', min_length)].strip().lstrip('\ufeff')).unique()
+
+    def get_all_sentences(self):
+        self.texts["sentences"] = self.texts.text.apply(sent_tokenize)
+        self.texts = self.texts.dropna().explode("sentences")
+        return list(self.texts.sentences)
 
 def get_mixed_sentences(n_per_corpus=1000):
     sentences = []
-    corpora = [DailyDialog, DialogSum, WoW]
+    corpora = [DailyDialog, DialogSum, WoW, CEFRTexts]
     for i, corpus in tqdm(enumerate(corpora), total=len(corpora)):
         corpus_inst = corpus()
-        sentences += set(corpus_inst.get_all_sentences())
+        corpus_sents = corpus_inst.get_all_sentences()
+        random.shuffle(corpus_sents)
+        sentences += set(corpus_sents)
         sentences = sentences[:(i+1)*n_per_corpus]
-    
-    sentences += get_cefr_sentences()
-    sentences = sentences[:(len(corpora)+1)*n_per_corpus]
-    random.shuffle(sentences)
     return sentences
 
 class SentenceDataset(Dataset):
@@ -123,6 +129,16 @@ class SentenceDataset(Dataset):
             'attention_mask': encoding['attention_mask'].flatten(),
             'labels': torch.tensor(self.labels[idx], dtype=torch.long)
         }
+
+def get_egp():
+    egp = pd.read_excel(f'{DATA_DIR}English Grammar Profile Online.xlsx')
+    # remove learner information from examples
+    egp['Example'] = egp['Example'].str.replace(r"\(.*\)", "", regex=True).str.strip()
+    egp['Type'] = egp['guideword'].apply(lambda x: 'FORM/USE' if 'FORM/USE' in x 
+                                         else 'USE' if 'USE' in x 
+                                         else 'FORM' if 'FORM' in x 
+                                         else x)
+    return egp
     
 def get_dataset(positive_examples, negative_examples, others, tokenizer, max_len, random_negatives=True, ratio = 0.5, max_positive_examples=500):
     # assemble dataset for one construction
