@@ -46,7 +46,7 @@ class DialogSum(DialogData):
         return pd.read_json(self.file, lines=True)
 
     def get_dialogues(self):
-        return self.dialogues_raw.dialogue.apply(lambda x: [utterance.split(': ', 1)[1] for utterance in x.split("\n")])
+        return list(self.dialogues_raw.dialogue.apply(lambda x: [utterance.split(': ', 1)[1] for utterance in x.split("\n")]))
 
 class DailyDialog(DialogData):
     def __init__(self, file=f"{DATA_DIR}dialogues_text.txt"):
