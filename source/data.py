@@ -3,8 +3,8 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 import nltk
-nltk.data.path.append(os.getenv('CACHE_DIR'))
-nltk.download('punkt')
+os.environ['NLTK_DATA'] = os.getenv('CACHE_DIR')
+nltk.download("punkt")
 from nltk.tokenize import sent_tokenize
 
 import re
