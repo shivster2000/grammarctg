@@ -139,33 +139,15 @@ def get_egp():
                                          else 'FORM' if 'FORM' in x 
                                          else x)
     return egp
-    
-def get_dataset(positive_examples, negative_examples, others, tokenizer, max_len, random_negatives=True, ratio = 0.5, max_positive_examples=500):
-    # assemble dataset for one construction
-    unique_positive = set(positive_examples) # remove duplicates
-    unique_negative = list(set(negative_examples).difference(unique_positive))
-    
-    num_positive = min(max(len(unique_positive), len(unique_negative) // (1 if random_negatives else 2)), max_positive_examples)
-    # 50% positive examples
-    num_repeats = -(-num_positive // len(unique_positive))
-    sentences = (unique_positive * num_repeats)[:num_positive]
-    labels = [1] * len(sentences)
 
-    num_augs = int(num_positive * (1-ratio)) if random_negatives else len(sentences)
-    # explicit negative examples
-    random.shuffle(unique_negative)
-    num_repeats = -(-num_augs // len(unique_negative))
-    sentences += (unique_negative * num_repeats)[:num_augs]
-    labels += [0] * num_augs
-    
-    if random_negatives:
-        num_rands = 2 * size - len(sentences) # fill to an even number
-        # rest: random negative examples (positive from other constructions)
-        random.shuffle(others)
-        sentences += others[:num_rands]
-        labels += [0] * num_rands
-    assert len(sentences) == 2 * size
-    assert sum(labels) == size
+def get_dataset(positives, negatives, others, tokenizer, max_len, others_ratio = 3, verbose=False):
+    unique_positive = list(set(positives)) # remove duplicates
+    unique_negative = list(set(negatives).difference(set(positives))) # remove duplicates and positives
+    num_rands = int(others_ratio * len(unique_negative))
+    random.shuffle(others)
+    sentences = unique_positive + unique_negative + others[:num_rands]
+    labels = [1] * len(unique_positive) + [0] * len(unique_negative) + [0] * len(others[:num_rands])
+    if verbose: print(sum(labels) / len(labels))
     return SentenceDataset(sentences, labels, tokenizer, max_len)
 
 def get_loaders(dataset, batch_size=32):

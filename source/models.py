@@ -8,6 +8,7 @@ import torch
 import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
 from transformers import BertTokenizer, BertModel
+from torchmetrics import MetricCollection, classification
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -39,7 +40,7 @@ class MultiTaskBERT(torch.nn.Module):
         pooled_output = outputs.pooler_output
         task_outputs = torch.stack([self.task_heads[task_id](pooled_output) for task_id in range(len(self.task_heads))])
         return (task_outputs[:,:,1] - task_outputs[:,:,0]).transpose(0, 1)
-
+                                                                    
 class RuleDetector(torch.nn.Module):
     def __init__(self, bert_encoder, hidden_dim=32, dropout_rate=0.25, train_bert=False):
         super().__init__()
@@ -52,26 +53,22 @@ class RuleDetector(torch.nn.Module):
         self.relu = torch.nn.ReLU().to(device)
         self.output = torch.nn.Linear(hidden_dim, 1).to(device)
         self.sigmoid = torch.nn.Sigmoid().to(device)
+        self.metrics = MetricCollection({
+            'accuracy': classification.BinaryAccuracy(),
+            'precision': classification.BinaryPrecision(),
+            'f1': classification.BinaryF1Score()
+        })
     
-    def forward(self, input_ids, attention_mask, diagnose=False):
+    def forward(self, input_ids, attention_mask):
         with torch.no_grad():
             outputs = self.bert(input_ids, attention_mask)
             x = torch.cat(outputs.hidden_states, dim=-1)
-        if diagnose:
-            print(x.shape)
         x = self.dropout(x)
         x = self.hidden(x)
-        if diagnose:
-            print(x.shape)
         x = self.relu(x)
         x = self.output(x)
         x = self.sigmoid(x)
-        if diagnose:
-            print(x)
         x = x * attention_mask.unsqueeze(-1)
-        if diagnose:
-            print(x)
-        
         max_values, max_indices = torch.max(x, 1)
         return max_values.flatten(), max_indices.flatten()
 
@@ -114,53 +111,42 @@ def get_scores(level_model, candidates, max_len=128, batch_size=128, use_tqdm=Fa
             all_outputs.append(outputs)
     
     return torch.cat(all_outputs, dim=0)
-
-def train(model, train_dataloader, val_dataloader, num_epochs=3, lr=1e-4, criterion = torch.nn.BCELoss(), optimizer = None):
+    
+def train(model, train_dataloader, val_dataloader, num_epochs=3, lr=1e-4, criterion = torch.nn.BCELoss(), optimizer = None, verbose=True):
     if optimizer is None: optimizer = torch.optim.AdamW(model.parameters(), lr)
-    for epoch in range(num_epochs):
+    last_val_loss = 2
+    for epoch in range(num_epochs if num_epochs else 100):
         model.train()
         total_loss = 0
-        
-        for batch in tqdm(train_dataloader):
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['labels'].to(device)
-
-            values, _ = model(input_ids, attention_mask=attention_mask, diagnose=False)
-            loss = criterion(values, labels.float())
+        for batch in tqdm(train_dataloader) if verbose else train_dataloader:
+            input_ids, attention_mask, labels = (batch['input_ids'].to(device), batch['attention_mask'].to(device), batch['labels'].to(device))
+            outputs, _ = model(input_ids, attention_mask)
+            loss = criterion(outputs, labels.float())
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
-
             total_loss += loss.item()
+        if verbose: print(f'Training loss: {total_loss / len(train_dataloader)}')
 
-        avg_train_loss = total_loss / len(train_dataloader)
-        print(f'Training loss: {avg_train_loss}')
-
-        # Validation phase
-        model.eval() 
-        total_correct = 0
-        total_examples = 0
-        
-        with torch.no_grad():  # No gradients needed for validation
+        model.eval()
+        val_loss=0
+        with torch.no_grad():
+            model.metrics.reset()
             for batch in val_dataloader:
-                input_ids = batch['input_ids'].to(device)
-                attention_mask = batch['attention_mask'].to(device)
-                labels = batch['labels'].to(device)
-    
+                input_ids, attention_mask, labels = (batch['input_ids'].to(device), batch['attention_mask'].to(device), batch['labels'].to(device))
                 outputs, _ = model(input_ids, attention_mask)
-                predictions = outputs > 0.5                
-                total_correct += (predictions.flatten() == labels).sum().item()
-                total_examples += labels.size(0)
-
-        accuracy = total_correct / total_examples
-        print(f'Accuracy: {accuracy}')
-    return optimizer, accuracy
+                model.metrics.update(outputs, labels)
+                val_loss += criterion(outputs, labels.float()).item()
+        avg_val_loss = val_loss / len(val_dataloader)
+        if verbose: print(f'Val loss: {avg_val_loss}')
+        if last_val_loss < avg_val_loss + 5e-3: break
+        last_val_loss = avg_val_loss
+    return optimizer, {key: round(value.cpu().item(), 3) for key, value in model.metrics.compute().items()}
 
 def probe_model(model, probes):
     encoded_input = bert_tokenizer(probes, return_tensors='pt', max_length=64, padding='max_length', truncation=True).to(device)
     with torch.no_grad():
-        values, indices = model(encoded_input['input_ids'], encoded_input['attention_mask'], diagnose=False)
+        values, indices = model(encoded_input['input_ids'], encoded_input['attention_mask'])
     tokens = [bert_tokenizer.convert_ids_to_tokens(ids) for ids in encoded_input['input_ids']]
     max_tokens = [token[indices[i]] for i, token in enumerate(tokens)]
     return values.cpu(), max_tokens
@@ -197,4 +183,5 @@ def load_classifier(nr, dir):
         for name, param in classifier.named_parameters():
             if name in trainable_params:
                 param.copy_(trainable_params[name])
+    classifier.eval()
     return classifier

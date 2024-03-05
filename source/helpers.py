@@ -61,7 +61,7 @@ def get_egp():
     return egp
 
 # functions
-def map_egp_id(file_path='data/egp_list.xlsx', sheet_name='English Vocabulary Profile'):
+def map_egp_id(file_path='../data/egp_list.xlsx', sheet_name='English Vocabulary Profile'):
     # Read the Excel file
     df = pd.read_excel(file_path, sheet_name=sheet_name)
 
