@@ -122,3 +122,6 @@ def parse_response(response, positive=True):
     examples = [match for match in matches]
     bolds = [get_bolds(example) for example in examples]
     return examples, bolds
+
+def flatten_list_of_lists(list_of_lists):
+    return [item for sublist in list_of_lists for item in sublist]
