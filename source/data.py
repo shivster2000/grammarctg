@@ -94,7 +94,7 @@ class CEFRTexts():
         self.texts = pd.read_csv(file)
 
     def get_beginnings(self, min_length):
-        return self.texts.text.apply(lambda text: text[:text.find(' ', min_length)].strip().lstrip('\ufeff')).unique()
+        return self.texts.text.apply(lambda text: sent_tokenize(text)[0].replace("\ufeff", ""))
 
     def get_all_sentences(self):
         self.texts["sentences"] = self.texts.text.apply(sent_tokenize)
