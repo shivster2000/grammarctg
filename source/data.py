@@ -3,8 +3,8 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 import nltk
-os.environ['NLTK_DATA'] = os.getenv('CACHE_DIR')
-nltk.download("punkt")
+nltk.download("punkt", download_dir=os.getenv('CACHE_DIR'))
+nltk.data.path.insert(0, os.getenv('CACHE_DIR'))
 from nltk.tokenize import sent_tokenize
 
 import re
@@ -89,6 +89,21 @@ class WoW(DialogData):
             dialogues.append(dialogue_texts)
         return dialogues
 
+class CMUDoG(DialogData):
+    def __init__(self, file=f"{DATA_DIR}cmu-dog/"):
+        super().__init__(file)
+
+    def read_file(self):
+        dialogs = []
+        for file in ["train", "test", "valid"]:
+            file_path = self.file + file + ".json"
+            with open(file_path, 'r') as json_file:
+                dialogs += json.load(json_file)
+        return dialogs
+
+    def get_dialogues(self):
+        return self.dialogues_raw
+
 class CEFRTexts():
     def __init__(self, file=f"{DATA_DIR}cefr_leveled_texts.csv"):
         self.texts = pd.read_csv(file)
@@ -100,6 +115,22 @@ class CEFRTexts():
         self.texts["sentences"] = self.texts.text.apply(sent_tokenize)
         self.texts = self.texts.dropna().explode("sentences")
         return list(self.texts.sentences)
+        
+def flatten_list_of_lists(list_of_lists):
+    return [item for sublist in list_of_lists for item in sublist]
+
+class TextCorpora():
+    def __init__(self, names=['gutenberg', 'brown', 'reuters'], verbose=False):
+        self.sentences = {}
+        for name in names:
+            if verbose: print(f"Loading {name}")
+            nltk.download(name, download_dir=os.getenv('CACHE_DIR'))
+            corpus = getattr(nltk.corpus, name)
+            self.sentences[name] = [' '.join(sentence) for sentence in corpus.sents()]
+            if verbose: print(f"Loaded {len(self.sentences[name])} sentences")
+
+    def get_all_sentences(self):
+        return flatten_list_of_lists(self.sentences.values())
 
 def get_mixed_sentences(n_per_corpus=1000):
     sentences = []
