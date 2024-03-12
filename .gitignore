@@ -3,6 +3,7 @@ data/DuoLingoSLAM
 data/EFCAMDAT_Database.xml
 data/egp_examples.json
 data/wow/
+data/toc.json
 data/egp_gpt35.json
 **__pycache__**
 **cambridge.smille**

@@ -3,13 +3,10 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 import nltk
-nltk.download("punkt", download_dir=os.getenv('CACHE_DIR'))
-nltk.data.path.insert(0, os.getenv('CACHE_DIR'))
-from nltk.tokenize import sent_tokenize
 
 import re
 import random
-import torch
+from torch import tensor, long
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader, random_split
 import json
@@ -19,10 +16,16 @@ DATA_DIR ="../data/"
 def flatten_list_of_lists(list_of_lists):
     return [item for sublist in list_of_lists for item in sublist]
 
+def import_sent_tokenize():
+    nltk.download("punkt", download_dir=os.getenv('CACHE_DIR'))
+    nltk.data.path.insert(0, os.getenv('CACHE_DIR'))
+    from nltk.tokenize import sent_tokenize
+
 class DialogData:
     def __init__(self, file):
         self.file = file
         self.dialogues_raw = self.read_file()
+        import_sent_tokenize()
  
     def read_file(self):
         raise NotImplementedError("Subclass must implement abstract method")
@@ -104,9 +107,26 @@ class CMUDoG(DialogData):
     def get_dialogues(self):
         return self.dialogues_raw
 
+class ToC(DialogData):
+    def __init__(self, file=f"{DATA_DIR}toc.json"):
+        super().__init__(file)
+
+    def read_file(self):
+        with open(self.file, 'r', encoding='utf-8') as file:
+            data = json.load(file)
+        dialogs = []
+        for dialog in data.values():
+            dialogs.append([content['message'] for content in dialog['content']])
+        return dialogs
+
+    def get_dialogues(self):
+        return self.dialogues_raw
+
+
 class CEFRTexts():
     def __init__(self, file=f"{DATA_DIR}cefr_leveled_texts.csv"):
         self.texts = pd.read_csv(file)
+        import_sent_tokenize()
 
     def get_beginnings(self, min_length):
         return self.texts.text.apply(lambda text: sent_tokenize(text)[0].replace("\ufeff", ""))
@@ -143,6 +163,18 @@ def get_mixed_sentences(n_per_corpus=1000):
         sentences = sentences[:(i+1)*n_per_corpus]
     return sentences
 
+def get_dialog_data(dataset_names):
+    dialogs = []
+    dialog_sources = []
+    dialog_ids = []
+    for name in dataset_names:
+        dataset = globals()[name]()
+        ds_dialogs = dataset.get_dialogues()
+        dialogs += ds_dialogs
+        dialog_sources += [name] * len(dialogs)
+        dialog_ids += range(len(dialogs))
+    return list(zip(dialogs, dialog_sources, dialog_ids))
+
 class SentenceDataset(Dataset):
     def __init__(self, sentences, labels, tokenizer, max_len):
         self.sentences = sentences
@@ -158,7 +190,7 @@ class SentenceDataset(Dataset):
         return {
             'input_ids': encoding['input_ids'].flatten(),
             'attention_mask': encoding['attention_mask'].flatten(),
-            'labels': torch.tensor(self.labels[idx], dtype=torch.long)
+            'labels': tensor(self.labels[idx], dtype=long)
         }
 
 def get_egp():

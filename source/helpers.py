@@ -1,6 +1,7 @@
 import pandas as pd
 import webbrowser
 import os
+import random
 import re
 
 # constants
@@ -125,3 +126,14 @@ def parse_response(response, positive=True):
 
 def flatten_list_of_lists(list_of_lists):
     return [item for sublist in list_of_lists for item in sublist]
+
+def get_existing_classifiers(dir):
+    return [int(name.replace(".pth","")) for name in os.listdir(f"../models/{dir}")]
+
+def sample_dialog_snippet(dialog_data, n=5):
+    dialog = []
+    while len(dialog) < n+1:
+        dialog, source, id = random.choice(dialog_data)
+    index = random.randint(0, len(dialog) - n)
+    utterances = dialog[index:index+n]
+    return utterances[:-1], utterances[-1], source, id

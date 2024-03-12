@@ -52,6 +52,8 @@ def completion_to_score(message):
     return np.mean([float(m) for m in matches])
 
 def get_response_quality(context, responses):
+    if isinstance(context, list):
+        context = os.linesep.join([("A" if (i%2==0) else "B") + ": " + utt for i, utt in enumerate(context + [""])])
     preds = {metric: [] for metric in gpt_metrics.keys()}
     for res in tqdm(responses, desc="Responses", leave=False):
         for metric, prompt in gpt_metrics.items():
@@ -83,13 +85,15 @@ def multiple_constraints(responses_list, skills_list):
 Input: lists of response sets to evaluate
 Output: dict with list of evaluations
 """
-def evaluate_responses(contexts, responses_list, positive_skills_list, negative_skills_list):
+def evaluate_responses(contexts, responses_list, positive_skills_list, negative_skills_list=None):
     distinct_2 = [calculate_distinct_n(responses) for responses in responses_list]
     positive_satisfaction = multiple_constraints(responses_list, positive_skills_list)
-    negative_constraints = multiple_constraints(responses_list, negative_skills_list)
+    negative_constraints = {"negative_constraints": 
+                            multiple_constraints(responses_list, negative_skills_list)} if negative_skills_list else {}
     qualities = [get_response_quality(context, responses) for context, responses in tqdm(zip(contexts, responses_list), total=len(contexts), desc="Contexts")]
+    
     return {"Distinctiveness": distinct_2,
             "positive_constraints": positive_satisfaction,
-            "negative_constraints": negative_constraints,
+            **negative_constraints,
             **{key: [d[key] for d in qualities] for key in qualities[0]}
     }
