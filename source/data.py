@@ -16,10 +16,14 @@ DATA_DIR ="../data/"
 def flatten_list_of_lists(list_of_lists):
     return [item for sublist in list_of_lists for item in sublist]
 
+nltk_imported = False
 def import_sent_tokenize():
+    global nltk_imported
+    if nltk_imported: return  
     nltk.download("punkt", download_dir=os.getenv('CACHE_DIR'))
     nltk.data.path.insert(0, os.getenv('CACHE_DIR'))
     from nltk.tokenize import sent_tokenize
+    nltk_imported = True
 
 class DialogData:
     def __init__(self, file):

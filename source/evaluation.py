@@ -4,7 +4,7 @@ from nltk.util import ngrams
 import os
 import re
 import numpy as np
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 
 import sys
 sys.path.append('../source')
@@ -80,6 +80,22 @@ def get_response_quality(context, responses):
 
 def multiple_constraints(responses_list, skills_list):
     return [[detector.constraint_satisfaction(response, skills) for response in responses] for responses, skills in zip(responses_list, skills_list)]
+
+"""
+Input: one context and reponses to evaluate
+Output: dict with evaluations
+"""
+def evaluate(context, responses, positive_skills, negative_skills=None, evaluate_quality=True):
+    distinct_2 = calculate_distinct_n(responses)
+    positive_satisfaction = [detector.constraint_satisfaction(response, positive_skills) for response in responses]
+    negative_constraints = {"negative_constraints":         [detector.constraint_satisfaction(response, negative_skills) for response in responses]} if negative_skills else {}
+    qualities = get_response_quality(context, responses) if evaluate_quality else {}
+    
+    return {"Distinctiveness": distinct_2,
+            "positive_constraints": positive_satisfaction,
+            **negative_constraints,
+            **qualities
+    }
     
 """
 Input: lists of response sets to evaluate

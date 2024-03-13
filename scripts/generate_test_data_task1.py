@@ -50,7 +50,8 @@ for _ in range(args.num_dialogs):
                 'response': response,
                 'source': source,
                 'id': id,
-                'constraints': list(constraints['#'])
+                'constraints': list(constraints['#']),
+                'n_subcats': num_subcats
             })
 testset = pd.DataFrame(data)
 testset.to_json(f'../data/task1_test.json')

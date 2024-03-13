@@ -10,6 +10,7 @@ args = parser.parse_args()
 # script
 import os
 import pandas as pd
+from pandas.testing import assert_frame_equal
 import sys
 sys.path.append(f'../source')
 import data
@@ -39,8 +40,10 @@ def get_responses(case):
 
 # logic
 if os.path.exists(output_file):
+    original_testset = pd.read_json(input_file)
     testset = pd.read_json(output_file)
-    # TODO: maybe check match with input file
+    cols_to_assert = ['context', 'constraints']
+    assert_frame_equal(testset[cols_to_assert], original_testset[cols_to_assert])
 else:
     testset = pd.read_json(input_file)
     testset['responses'] = [[]] * len(testset)
