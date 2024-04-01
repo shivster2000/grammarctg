@@ -73,8 +73,9 @@ def map_egp_id(file_path='../data/egp_list.xlsx', sheet_name='English Vocabulary
     # Create a dictionary mapping EGP_ID to Can-do statement
     can_do_mapping = dict(zip(df['EGP_ID'], df['Can-do statement']))
     level_mapping = dict(zip(df['EGP_ID'], df['Level']))
+    subcat_mapping = dict(zip(df['EGP_ID'], df['SubCategory']))
 
-    return can_do_mapping, level_mapping
+    return can_do_mapping, level_mapping, subcat_mapping
 
 def create_html_from_messages(messages):
     html_output = ""
