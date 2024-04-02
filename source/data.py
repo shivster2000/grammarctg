@@ -168,8 +168,8 @@ def get_dialog_data(dataset_names=DATASET_NAMES):
         dataset = globals()[name]()
         ds_dialogs = dataset.get_dialogues()
         dialogs += ds_dialogs
-        dialog_sources += [name] * len(dialogs)
-        dialog_ids += range(len(dialogs))
+        dialog_sources += [name] * len(ds_dialogs)
+        dialog_ids += list(range(len(ds_dialogs)))
     return list(zip(dialogs, dialog_sources, dialog_ids))
 
 class SentenceDataset(Dataset):
