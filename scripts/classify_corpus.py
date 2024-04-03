@@ -15,9 +15,9 @@ load_dotenv()
 random.seed(os.getenv("RANDOM_SEED"))
 
 # params
-out_file = '../data/corpus_classification.pkl'
+out_file = '../data/corpus_classification_all.pkl'
 dir="corpus_training"
-max_responses = int(1e4)
+max_responses = int(1e6)
 n = 4
 batch_size = 256
 

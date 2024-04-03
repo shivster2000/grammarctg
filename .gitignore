@@ -9,3 +9,5 @@ data/egp_gpt35.json
 **cambridge.smille**
 cloud.txt
 **/.ipynb_checkpoints
+**slurm**
+**wandb**
