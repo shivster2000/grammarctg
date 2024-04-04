@@ -144,7 +144,9 @@ def train(model, train_dataloader, val_dataloader, num_epochs=3, lr=1e-4, criter
     return optimizer, {key: round(value.cpu().item(), 3) for key, value in model.metrics.compute().items()}
 
 def probe_model(model, probes):
-    encoded_input = bert_tokenizer(probes, return_tensors='pt', max_length=64, padding='max_length', truncation=True).to(device)
+    encoded_input = bert_tokenizer(probes, return_tensors='pt', max_length=64, padding='max_length', truncation=True)
+    encoded_input = {key: value.to(device) for key, value in encoded_input.items()}
+    model.eval()
     with torch.no_grad():
         values, indices = model(encoded_input['input_ids'], encoded_input['attention_mask'])
     tokens = [bert_tokenizer.convert_ids_to_tokens(ids) for ids in encoded_input['input_ids']]
