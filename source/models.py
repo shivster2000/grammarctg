@@ -10,7 +10,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from transformers import BertTokenizer, BertModel
 from torchmetrics import MetricCollection, classification
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class NonlinearTaskHead(torch.nn.Module):
     def __init__(self, input_dim, num_labels, hidden_dim=16):

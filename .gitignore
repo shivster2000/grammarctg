@@ -11,4 +11,4 @@ cloud.txt
 **/.ipynb_checkpoints
 **slurm**
 **wandb**
-models/mistral_FT
+models/mistral*
