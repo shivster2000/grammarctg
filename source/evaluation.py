@@ -51,31 +51,36 @@ def completion_to_score(message):
         return -1
     return np.mean([float(m) for m in matches])
 
+def join_context(context):
+    return os.linesep.join([("A" if (i%2==0) else "B") + ": " + utt for i, utt in enumerate(context)])
+    
+def get_single_response_metric(metric, context, response):
+    if isinstance(context, list): context = join_context(context)
+    prompt = gpt_metrics[metric]
+    text_prompt = f"Context:\n{context}\nResponse:\n{response}"
+    gpt_score = -1
+    score_backoff = 0
+    while gpt_score == -1 and score_backoff < 2:
+        responses = api.get_openai_chat_completion(
+            model="gpt-3.5-turbo",
+            temperature=0.0,
+            max_tokens=20,
+            messages=[
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": text_prompt},
+            ],
+        )
+        gpt_score = completion_to_score(responses[0])
+        score_backoff += 1
+    if gpt_score != -1:
+        return gpt_score
+    return 3 # default
+
 def get_response_quality(context, responses):
-    if isinstance(context, list):
-        context = os.linesep.join([("A" if (i%2==0) else "B") + ": " + utt for i, utt in enumerate(context + [""])])
     preds = {metric: [] for metric in gpt_metrics.keys()}
     for res in tqdm(responses, desc="Responses", leave=False):
-        for metric, prompt in gpt_metrics.items():
-            text_prompt = f"Context:{context}\nResponse:{res}"
-            gpt_score = -1
-            score_backoff = 0
-            while gpt_score == -1 and score_backoff < 2:
-                responses = api.get_openai_chat_completion(
-                    model="gpt-3.5-turbo",
-                    temperature=0.0,
-                    max_tokens=20,
-                    messages=[
-                        {"role": "system", "content": prompt},
-                        {"role": "user", "content": text_prompt},
-                    ],
-                )
-                gpt_score = completion_to_score(responses[0])
-                score_backoff += 1
-            if gpt_score != -1:
-                preds[metric].append(gpt_score)
-            else:
-                preds[metric].append(3)
+        for metric in gpt_metrics.keys():
+            preds[metric].append(get_single_response_metric(metric, context, res))
     return preds
 
 def multiple_constraints(responses_list, skills_list):
