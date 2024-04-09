@@ -29,11 +29,12 @@ class GrammarDetection():
         return {nr: models.probe_model(classifier, sentences) for nr, classifier in self.classifiers.items()}
 
     def constraint_satisfaction(self, text, constraints):
+        if text=="": return [0.0 for _ in constraints]
         sentences = nltk.sent_tokenize(text)
         hits = []
         for nr in constraints:
             outputs = models.probe_model(self.classifiers[nr], sentences)
-            hits.append(sum(outputs[0]>0.5).item() / len(sentences))
+            hits.append((outputs[0]>0.5).any().item())
         return hits
 
 detector = GrammarDetection()
@@ -118,3 +119,4 @@ def evaluate_responses(contexts, responses_list, positive_skills_list, negative_
             **negative_constraints,
             **{key: [d[key] for d in qualities] for key in qualities[0]}
     }
+
