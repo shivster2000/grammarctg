@@ -138,3 +138,14 @@ def sample_dialog_snippet(dialog_data, n=5):
     index = random.randint(0, len(dialog) - n)
     utterances = dialog[index:index+n]
     return utterances[:-1], utterances[-1], source, id
+
+egp = get_egp()
+def get_generation_prompt(item, unconstrained=False):
+    rules = egp[egp['#'].isin(item['constraints'])]
+    constraints = os.linesep.join("- " + rules['SubCategory'] + ": " + rules['Can-do statement']) # " - " + rules['guideword']
+    context = os.linesep.join([("A" if (i%2==0) else "B") + ": " + utt for i, utt in enumerate(item["context"])])
+    instruction = f"Write the response of A"
+    instruction += f" and include these grammatical items in the response:\n{constraints}" if not unconstrained else "." 
+    item['prompt'] = f"[INST] {instruction}\nDialog:\n{context} [/INST] \nA: "
+    item['text'] = item['prompt'] + item['response'] + "</s>"
+    return item

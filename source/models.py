@@ -2,12 +2,14 @@ from dotenv import load_dotenv
 load_dotenv()
 import os
 
-from tqdm import tqdm
+import math
+import re
+from tqdm.notebook import tqdm
 import copy
 import torch
 import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
-from transformers import BertTokenizer, BertModel
+from transformers import BertTokenizer, BertModel, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from torchmetrics import MetricCollection, classification
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -187,3 +189,26 @@ def load_classifier(nr, dir):
                 param.copy_(trainable_params[name])
     classifier.eval()
     return classifier
+
+def load_generator(model_name= "mistralai/Mistral-7B-Instruct-v0.2", quantized=True):
+    bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16, bnb_4bit_quant_type="nf4")
+    model = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=bnb_config if quantized else None, cache_dir=os.getenv('CACHE_DIR'), device_map="auto")
+    model.config.use_cache = False
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, cache_dir=os.getenv('CACHE_DIR'))
+    return model, tokenizer
+
+def generate(model, tokenizer, prompts, max_new_tokens=128, batch_size=32, verbose=False, skip_special_tokens=True):
+    tokenizer.padding_side = "left"
+    model.eval()
+    outputs = []
+    for i in tqdm(range(0, len(prompts), batch_size), total=math.ceil(len(prompts)/batch_size), desc="Generate"):
+        batch = prompts[i:i + batch_size]
+        model_input = tokenizer(batch, return_tensors="pt", padding='max_length', truncation=True, max_length=512).to(device)
+        #print(model_input)
+        with torch.no_grad():
+            token_ids = model.generate(**model_input, max_new_tokens=max_new_tokens, pad_token_id=2, eos_token_id=[2,32000])
+        outputs += tokenizer.batch_decode(token_ids[:,model_input['input_ids'].shape[1]:], skip_special_tokens=skip_special_tokens, device="cpu")
+        if verbose: print(outputs[-batch_size:])
+    tokenizer.padding_side = "right"
+    responses = [re.search(r'(.*)(\nB:)?', output).group(1) for output in outputs]
+    return responses[0] if len(responses)==1 else responses

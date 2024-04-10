@@ -87,6 +87,16 @@ def get_response_quality(context, responses):
 def multiple_constraints(responses_list, skills_list):
     return [[detector.constraint_satisfaction(response, skills) for response in responses] for responses, skills in zip(responses_list, skills_list)]
 
+def calc_metrics(contexts, outputs, constraints, eval_quality=False):
+    scores = [np.mean(detector.constraint_satisfaction(output, constraint)) for output, constraint in zip(outputs, constraints)]
+    constraint_outputs = lambda comb: [outputs[idx] for idx, constraint in enumerate(constraints) if constraint==comb]
+    distinct = [calculate_distinct_n(constraint_outputs(comb)) for comb in np.unique(constraints)]
+    if eval_quality:
+        iter_metrics = tqdm(gpt_metrics.keys(), desc="Metrics", total=len(gpt_metrics))
+        iter_responses = lambda: tqdm(zip(contexts, outputs), desc="Responses", total=len(outputs))
+        quality = {metric: [get_single_response_metric(metric, context, output) for context, output in iter_responses()] for metric in iter_metrics}
+    return scores, distinct, (quality if eval_quality else {})
+
 """
 Input: one context and reponses to evaluate
 Output: dict with evaluations
@@ -119,4 +129,3 @@ def evaluate_responses(contexts, responses_list, positive_skills_list, negative_
             **negative_constraints,
             **{key: [d[key] for d in qualities] for key in qualities[0]}
     }
-
