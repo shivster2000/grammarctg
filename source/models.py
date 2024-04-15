@@ -2,9 +2,10 @@ from dotenv import load_dotenv
 load_dotenv()
 import os
 
+import gc
 import math
 import re
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 import copy
 import torch
 import numpy as np
@@ -185,30 +186,45 @@ def load_classifier(nr, dir):
     classifier = RuleDetector(bert_encoder)
     with torch.no_grad():
         for name, param in classifier.named_parameters():
+            name_prefixed = f"module.{name}"
             if name in trainable_params:
                 param.copy_(trainable_params[name])
+            if name_prefixed in trainable_params:
+                param.copy_(trainable_params[name_prefixed])
     classifier.eval()
     return classifier
 
-def load_generator(model_name= "mistralai/Mistral-7B-Instruct-v0.2", quantized=True):
+def load_generator(model_name= "mistralai/Mistral-7B-Instruct-v0.2", quantized=False):
     bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16, bnb_4bit_quant_type="nf4")
     model = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=bnb_config if quantized else None, cache_dir=os.getenv('CACHE_DIR'), device_map="auto")
     model.config.use_cache = False
-    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, cache_dir=os.getenv('CACHE_DIR'))
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, cache_dir=os.getenv('CACHE_DIR'), padding_side="right")
     return model, tokenizer
 
-def generate(model, tokenizer, prompts, max_new_tokens=128, batch_size=32, verbose=False, skip_special_tokens=True):
+def generate(model, tokenizer, prompts, max_new_tokens=128, batch_size=32, verbose=False, skip_special_tokens=True, do_sample=False):
     tokenizer.padding_side = "left"
     model.eval()
     outputs = []
     for i in tqdm(range(0, len(prompts), batch_size), total=math.ceil(len(prompts)/batch_size), desc="Generate"):
         batch = prompts[i:i + batch_size]
         model_input = tokenizer(batch, return_tensors="pt", padding='max_length', truncation=True, max_length=512).to(device)
-        #print(model_input)
+        if verbose: print(model_input)
         with torch.no_grad():
-            token_ids = model.generate(**model_input, max_new_tokens=max_new_tokens, pad_token_id=2, eos_token_id=[2,32000])
+            token_ids = model.generate(**model_input, max_new_tokens=max_new_tokens, pad_token_id=2, eos_token_id=[2,32000], do_sample=do_sample)
+        
         outputs += tokenizer.batch_decode(token_ids[:,model_input['input_ids'].shape[1]:], skip_special_tokens=skip_special_tokens, device="cpu")
         if verbose: print(outputs[-batch_size:])
     tokenizer.padding_side = "right"
-    responses = [re.search(r'(.*)(\nB:)?', output).group(1) for output in outputs]
+    responses = [re.search(r'(.*)(\nB:)?', output.strip()).group(1) for output in outputs]
     return responses[0] if len(responses)==1 else responses
+
+def clean_tensors():
+    for obj in gc.get_objects():
+        try:
+            if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                if type(obj) is models.torch.Tensor:
+                    del obj
+        except:
+            pass
+    torch.cuda.empty_cache()
+    gc.collect()

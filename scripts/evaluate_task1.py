@@ -24,8 +24,7 @@ for file in args.input_files:
     output_file = f'../data/{file.replace(".json", "")}_eval.json'
     if not os.path.exists(output_file):
         testset = pd.read_json(input_file)
-        testset['Distinctiveness'] = [None] * len(testset)
-        testset['positive_constraints'] = [[]] * len(testset)
+        testset['constraint_satisfaction'] = [[]] * len(testset)
         for quality_metric in evaluation.gpt_metrics.keys():
             testset[quality_metric] = [None] * len(testset)
     else: 
@@ -35,9 +34,12 @@ for file in args.input_files:
     max_rows = min(args.max_rows, len(testset))
     subset = testset[condition]
 
-    for idx, case in tqdm(subset.iterrows(), total=max(max_rows-(~condition).sum(), 0)):
+    for idx, case in tqdm(subset.iterrows(), total=max(max_rows-(~condition).sum(), 0), desc="Responses"):
         if idx >= max_rows: break
-        metrics = evaluation.evaluate(case['context'], case['responses'], case['constraints'], evaluate_quality=not args.skip_response_quality)
+        #if not args.skip_response_quality:
+        #    if len(case['constraints'])==1:
+        #        if idx % 10 != 0: continue
+        metrics = evaluation.evaluate(case['context'], case['responses'][0], case['constraints'], evaluate_quality=not args.skip_response_quality)
         for metric, value in metrics.items():
             testset.at[idx, metric] = value
         testset.to_json(output_file)

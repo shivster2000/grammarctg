@@ -1,6 +1,6 @@
 import argparse
 parser = argparse.ArgumentParser(description="Generate constrained responses to task 1")
-parser.add_argument("--n_responses", type=int, default=3, help="Number of responses. Default: %(default)s")
+parser.add_argument("--n_responses", type=int, default=1, help="Number of responses. Default: %(default)s")
 parser.add_argument("--input_file", type=str, default="task1_test.json", help="Input file name in data directory. Default: %(default)s")
 parser.add_argument("--output_file", type=str, default="task1_test_gpt35.json", help="Output file name in data directory. Default: %(default)s")
 parser.add_argument("--model", type=str, default="gpt35", help="Model to use. Default: %(default)s")

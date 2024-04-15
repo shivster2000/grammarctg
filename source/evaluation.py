@@ -25,12 +25,14 @@ class GrammarDetection():
         if skill_nrs is None: skill_nrs = [int(name.replace(".pth","")) for name in os.listdir(f"../models/{dir}")]
         self.classifiers = {nr: models.load_classifier(nr, dir) for nr in skill_nrs}
 
-    def score_texts(self, sentences):
-        return {nr: models.probe_model(classifier, sentences) for nr, classifier in self.classifiers.items()}
+    def score_texts(self, sentences, constraints=None):
+        if constraints is None: constraints = self.classifiers.keys()
+        return {nr: models.probe_model(self.classifiers[nr], sentences) for nr in constraints}
 
     def constraint_satisfaction(self, text, constraints):
         if text=="": return [0.0 for _ in constraints]
         sentences = nltk.sent_tokenize(text)
+        
         hits = []
         for nr in constraints:
             outputs = models.probe_model(self.classifiers[nr], sentences)
@@ -77,12 +79,8 @@ def get_single_response_metric(metric, context, response):
         return gpt_score
     return 3 # default
 
-def get_response_quality(context, responses):
-    preds = {metric: [] for metric in gpt_metrics.keys()}
-    for res in tqdm(responses, desc="Responses", leave=False):
-        for metric in gpt_metrics.keys():
-            preds[metric].append(get_single_response_metric(metric, context, res))
-    return preds
+def get_response_quality(context, response):
+    return {metric: get_single_response_metric(metric, context, response) for metric in tqdm(gpt_metrics.keys(), desc="Responses", leave=False)}
 
 def multiple_constraints(responses_list, skills_list):
     return [[detector.constraint_satisfaction(response, skills) for response in responses] for responses, skills in zip(responses_list, skills_list)]
@@ -101,14 +99,12 @@ def calc_metrics(contexts, outputs, constraints, eval_quality=False):
 Input: one context and reponses to evaluate
 Output: dict with evaluations
 """
-def evaluate(context, responses, positive_skills, negative_skills=None, evaluate_quality=True):
-    distinct_2 = calculate_distinct_n(responses)
-    positive_satisfaction = [detector.constraint_satisfaction(response, positive_skills) for response in responses]
-    negative_constraints = {"negative_constraints":         [detector.constraint_satisfaction(response, negative_skills) for response in responses]} if negative_skills else {}
-    qualities = get_response_quality(context, responses) if evaluate_quality else {}
+def evaluate(context, response, positive_skills, negative_skills=None, evaluate_quality=True):
+    positive_satisfaction = detector.constraint_satisfaction(response, positive_skills)
+    negative_constraints = {"negative_constraints": detector.constraint_satisfaction(response, negative_skills)} if negative_skills else {}
+    qualities = get_response_quality(context, response) if evaluate_quality else {}
     
-    return {"Distinctiveness": distinct_2,
-            "positive_constraints": positive_satisfaction,
+    return {"positive_constraints": positive_satisfaction,
             **negative_constraints,
             **qualities
     }
