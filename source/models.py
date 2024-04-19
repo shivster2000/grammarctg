@@ -1,3 +1,5 @@
+# This module offers classes and functions to interact with LLMs 
+
 from dotenv import load_dotenv
 load_dotenv()
 import os
@@ -13,9 +15,12 @@ from torch.utils.data import TensorDataset, DataLoader
 from transformers import BertTokenizer, BertModel, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from torchmetrics import MetricCollection, classification
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class NonlinearTaskHead(torch.nn.Module):
+    """
+    This is the classification module for the MultiTask BERT
+    """
     def __init__(self, input_dim, num_labels, hidden_dim=16):
         super().__init__()
         self.fc1 = torch.nn.Linear(input_dim, hidden_dim)
@@ -27,24 +32,36 @@ class NonlinearTaskHead(torch.nn.Module):
         return self.classifier(hidden)
 
 class MultiTaskBERT(torch.nn.Module):
+    """
+    This is the shared backbone LLM for the grammar classifcation 
+    """
     def __init__(self, bert, task_heads):
         super().__init__()
         self.bert = bert
         self.task_heads = torch.nn.ModuleList(task_heads)
 
     def forward(self, input_ids, attention_mask, task_id):
+        """
+        Classify one single grammar construct
+        """
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
         pooled_output = outputs.pooler_output
         task_output = self.task_heads[task_id](pooled_output)
         return task_output
 
     def forward_all(self, input_ids, attention_mask):
+        """
+        Running all classification heads simultaneously
+        """
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
         pooled_output = outputs.pooler_output
         task_outputs = torch.stack([self.task_heads[task_id](pooled_output) for task_id in range(len(self.task_heads))])
         return (task_outputs[:,:,1] - task_outputs[:,:,0]).transpose(0, 1)
                                                                     
 class RuleDetector(torch.nn.Module):
+    """
+    Similar to the non linear classification head but for only one grammar construct including the backbone with an option to freeze its parameters and built-in metrics
+    """
     def __init__(self, bert_encoder, hidden_dim=32, dropout_rate=0.25, train_bert=False):
         super().__init__()
         self.bert = bert_encoder
@@ -79,7 +96,10 @@ bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', cache_dir=os
 backbone_model = BertModel.from_pretrained('bert-base-uncased', cache_dir=os.getenv('CACHE_DIR'), output_hidden_states=True).to(device)
 bert_encoder = backbone_model
 
-def load_model(level, egp_df):  
+def load_model(level, egp_df): 
+    """
+    This loads the multi-task classifier for a specified EGP level
+    """
     df_level = egp_df[egp_df['Level'] == level]
     task_heads = [NonlinearTaskHead(backbone_model.config.hidden_size, 2) for _ in range(len(df_level))]
     multi_task_model = MultiTaskBERT(copy.deepcopy(backbone_model), task_heads).to(device)
@@ -87,6 +107,9 @@ def load_model(level, egp_df):
     return multi_task_model
 
 def get_scores(level_model, candidates, max_len=128, batch_size=128, use_tqdm=False, task_id=None):
+    """
+    This runs classification for all consructs on one CEFR level including tokenization
+    """
     encoding = bert_tokenizer.batch_encode_plus(
         candidates,
         max_length=128,
@@ -116,6 +139,9 @@ def get_scores(level_model, candidates, max_len=128, batch_size=128, use_tqdm=Fa
     return torch.cat(all_outputs, dim=0)
     
 def train(model, train_dataloader, val_dataloader, num_epochs=3, lr=1e-4, criterion = torch.nn.BCELoss(), optimizer = None, verbose=True):
+    """
+    This convenience function trains and evaluates a model in the PyTorch framework
+    """
     if optimizer is None: optimizer = torch.optim.AdamW(model.parameters(), lr)
     last_val_loss = 2
     for epoch in range(num_epochs if num_epochs else 100):
@@ -147,6 +173,9 @@ def train(model, train_dataloader, val_dataloader, num_epochs=3, lr=1e-4, criter
     return optimizer, {key: round(value.cpu().item(), 3) for key, value in model.metrics.compute().items()}
 
 def probe_model(model, probes):
+    """
+    This convenience function encodes a list of sequences and runs rule detection and returns the maximum scoring token
+    """
     encoded_input = bert_tokenizer(probes, return_tensors='pt', max_length=64, padding='max_length', truncation=True)
     encoded_input = {key: value.to(device) for key, value in encoded_input.items()}
     model.eval()
@@ -156,32 +185,42 @@ def probe_model(model, probes):
     max_tokens = [token[indices[i]] for i, token in enumerate(tokens)]
     return values.cpu(), max_tokens
 
-def score_corpus(model, dataloader, max_positive=10, max_batches=10, threshold=0.5):
+def score_corpus(model, dataloader, max_positive=10, max_batches=10, threshold=0.5, progress=True):
+    """
+    This function takes a pre-encoded corpus and runs one grammar classifier up to a certain number of hits or batches
+    """
     model.eval()
     all_values = []
     all_max_tokens = []
     batches = 0
     
     with torch.no_grad():
-        for input_ids, attention_mask in tqdm(dataloader):
+        for input_ids, attention_mask in tqdm(dataloader) if progress else dataloader:
             batches += 1
             if batches > max_batches: break
-            tokens = [bert_tokenizer.convert_ids_to_tokens(ids) for ids in input_ids]
+            
             input_ids, attention_mask = input_ids.to(device), attention_mask.to(device)
             
             values, indices = model(input_ids, attention_mask)
-            max_tokens = [tokens[j][idx] if idx < len(tokens[j]) else '[PAD]' for j, idx in enumerate(indices.cpu().tolist())]
-
+            #tokens = [bert_tokenizer.convert_ids_to_tokens(ids) for ids in input_ids]
+            #max_tokens = [tokens[j][idx] if idx < len(tokens[j]) else '[PAD]' for j, idx in enumerate(indices.cpu().tolist())]
+            
             all_values.extend(values.cpu().tolist())
-            all_max_tokens.extend(max_tokens)
+            all_max_tokens.extend(indices.cpu().tolist())
             if np.sum(np.array(all_values)>threshold) > max_positive: break
     return all_values, all_max_tokens
 
 def save_classifier(classifier, nr, dir):
+    """
+    Save a grammar classifier to the specified subdirectory in the models directory
+    """
     trainable_params = {name: param for name, param in classifier.named_parameters() if param.requires_grad}
     torch.save(trainable_params, f'../models/{dir}/{nr}.pth')
 
 def load_classifier(nr, dir):
+    """
+    Load a grammar classifier from the specified subdirectory in the models directory
+    """
     trainable_params = torch.load(f'../models/{dir}/{nr}.pth')
     classifier = RuleDetector(bert_encoder)
     with torch.no_grad():
@@ -195,6 +234,9 @@ def load_classifier(nr, dir):
     return classifier
 
 def load_generator(model_name= "mistralai/Mistral-7B-Instruct-v0.2", quantized=False):
+    """
+    This loads the specified model with its tokenizer for text generation, optionally in 4 bit
+    """
     bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16, bnb_4bit_quant_type="nf4")
     model = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=bnb_config if quantized else None, cache_dir=os.getenv('CACHE_DIR'), device_map="auto")
     model.config.use_cache = False
@@ -202,6 +244,9 @@ def load_generator(model_name= "mistralai/Mistral-7B-Instruct-v0.2", quantized=F
     return model, tokenizer
 
 def generate(model, tokenizer, prompts, max_new_tokens=128, batch_size=32, verbose=False, skip_special_tokens=True, do_sample=False):
+    """
+    This generates tokens and returns the decoded and extracted response to the dialog generation task
+    """
     tokenizer.padding_side = "left"
     model.eval()
     outputs = []
@@ -219,6 +264,9 @@ def generate(model, tokenizer, prompts, max_new_tokens=128, batch_size=32, verbo
     return responses[0] if len(responses)==1 else responses
 
 def clean_tensors():
+    """
+    This helpers cleans tensors from memory
+    """
     for obj in gc.get_objects():
         try:
             if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):

@@ -1,3 +1,5 @@
+# This module containts helper functions for outputting the Polke annotations, handling the English Grammar Profile conveniently, and creating prompts
+
 import pandas as pd
 import webbrowser
 import os

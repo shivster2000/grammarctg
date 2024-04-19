@@ -1,7 +1,8 @@
-# Exp 001: This experiment outputs annotated candidate responses from OpenAIs GPT3.5 with level-coded annotations
+# Exp 001: POLKE Annotation
+# This experiment outputs grammar-annotated candidate responses from OpenAIs GPT3.5 with level-coded annotations to the configured directory as a HTML file.
 
 import sys
-sys.path.append('source')
+sys.path.append('../source')
 import helpers
 import api
 

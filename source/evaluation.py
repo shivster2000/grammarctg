@@ -1,3 +1,5 @@
+# This module contains functions for the evaluation of grammar-controlled educational text generation
+
 import nltk
 nltk.download("punkt")
 from nltk.util import ngrams
@@ -60,7 +62,8 @@ def join_context(context):
 def get_single_response_metric(metric, context, response):
     if isinstance(context, list): context = join_context(context)
     prompt = gpt_metrics[metric]
-    text_prompt = f"Context:\n{context}\nResponse:\n{response}"
+    text_prompt = f"Context:\n{context}\n" if not metric == "Grammatical Correctness" else ""
+    text_prompt += f"Response:\n{response}"
     gpt_score = -1
     score_backoff = 0
     while gpt_score == -1 and score_backoff < 2:

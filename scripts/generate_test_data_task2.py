@@ -16,6 +16,7 @@ load_dotenv()
 import sys
 sys.path.append(f'../source')
 import data
+import helpers
 
 random.seed(os.getenv("RANDOM_SEED"))
 
@@ -25,29 +26,27 @@ dialog_data = data.get_dialog_data(args.test_datasets)
 
 # prepare iterations
 num_subcats_list = list(range(1,1+args.max_subcats))
+levels = list(egp['Level'].unique())
 
 # helpers
-levels = egp
 def sample_subcat_constraints(n_subcats):
-    #if level is None: level = random.choice(egp['Level'].unique())
-    if len(args.subcats) < n_subcats: return egp.sample(0)
-    subcats = random.sample(args.subcats, n_subcats)
-    return egp[(egp['SubCategory'].isin(subcats)) & egp['#'].isin(classifiers_nrs)].groupby("SubCategory").sample(n_constraints)
+    
+    return zip(subcats, subcat_levels)
 
 # sample and save dataframe
 data = []
 for _ in range(args.num_dialogs):
     context, response, source, id = helpers.sample_dialog_snippet(dialog_data)
     for num_subcats in num_subcats_list:
-        constraints = sample_single_constraints(num_constraints, num_subcats)
-        if len(constraints)==0: continue
+        subcats = random.sample(args.subcats, num_subcats) # without replacement
+        subcat_levels = random.choices(levels, k=len(subcats)) # with replacement
         data.append({
             'context': context,
             'response': response,
             'source': source,
             'id': id,
-            'constraints': list(constraints['#']),
-            'n_subcats': num_subcats
+            'categories': subcats,
+            'levels': subcat_levels
         })
 testset = pd.DataFrame(data)
-testset.to_json(f'../data/task1_test.json')
+testset.to_json(f'../data/task2_test.json')
