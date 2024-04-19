@@ -15,7 +15,7 @@ from torch.utils.data import TensorDataset, DataLoader
 from transformers import BertTokenizer, BertModel, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from torchmetrics import MetricCollection, classification
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 class NonlinearTaskHead(torch.nn.Module):
     """
@@ -243,7 +243,7 @@ def load_generator(model_name= "mistralai/Mistral-7B-Instruct-v0.2", quantized=F
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, cache_dir=os.getenv('CACHE_DIR'), padding_side="right")
     return model, tokenizer
 
-def generate(model, tokenizer, prompts, max_new_tokens=128, batch_size=32, verbose=False, skip_special_tokens=True, do_sample=False):
+def generate(model, tokenizer, prompts, eos_token_id, max_new_tokens=128, batch_size=32, verbose=False, skip_special_tokens=True, do_sample=False):
     """
     This generates tokens and returns the decoded and extracted response to the dialog generation task
     """
@@ -255,7 +255,10 @@ def generate(model, tokenizer, prompts, max_new_tokens=128, batch_size=32, verbo
         model_input = tokenizer(batch, return_tensors="pt", padding='max_length', truncation=True, max_length=512).to(device)
         if verbose: print(model_input)
         with torch.no_grad():
-            token_ids = model.generate(**model_input, max_new_tokens=max_new_tokens, pad_token_id=2, eos_token_id=[2,32000], do_sample=do_sample)
+            token_ids = model.generate(**model_input, max_new_tokens=max_new_tokens, pad_token_id=tokenizer.eos_token_id, eos_token_id=eos_token_id,
+                                       do_sample=do_sample,
+                                       temperature=0.6 if do_sample else None,
+                                       top_p=0.9 if do_sample else None)
         
         outputs += tokenizer.batch_decode(token_ids[:,model_input['input_ids'].shape[1]:], skip_special_tokens=skip_special_tokens, device="cpu")
         if verbose: print(outputs[-batch_size:])

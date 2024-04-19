@@ -151,3 +151,4 @@ def get_generation_prompt(item, unconstrained=False):
     item['prompt'] = f"[INST] {instruction}\nDialog:\n{context} [/INST] \nA: "
     item['text'] = item['prompt'] + item['response'] + "</s>"
     return item
+
