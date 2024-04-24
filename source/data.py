@@ -213,9 +213,9 @@ def get_dataset(positives, negatives, others, tokenizer, max_len, others_ratio =
     if verbose: print(sum(labels) / len(labels))
     return SentenceDataset(sentences, labels, tokenizer, max_len)
 
-def get_loaders(dataset, batch_size=32):
+def get_loaders(dataset, test_size=0.8, batch_size=32):
     total_size = len(dataset)
-    train_size = int(0.8 * total_size)
+    train_size = int((1.0-test_size) * total_size)
     val_size = total_size - train_size
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)

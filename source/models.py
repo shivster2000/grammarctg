@@ -144,7 +144,7 @@ def train(model, train_dataloader, val_dataloader, num_epochs=3, lr=1e-4, criter
     """
     if optimizer is None: optimizer = torch.optim.AdamW(model.parameters(), lr)
     last_val_loss = 2
-    for epoch in range(num_epochs if num_epochs else 100):
+    for epoch in tqdm(range(num_epochs if num_epochs else 10), leave=False):
         model.train()
         total_loss = 0
         for batch in tqdm(train_dataloader) if verbose else train_dataloader:
@@ -264,6 +264,7 @@ def generate(model, tokenizer, prompts, eos_token_id, max_new_tokens=128, batch_
         if verbose: print(outputs[-batch_size:])
     tokenizer.padding_side = "right"
     responses = [re.search(r'(.*)(\nB:)?', output.strip()).group(1) for output in outputs]
+    responses=outputs
     return responses[0] if len(responses)==1 else responses
 
 def clean_tensors():

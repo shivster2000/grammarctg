@@ -133,6 +133,11 @@ def flatten_list_of_lists(list_of_lists):
 def get_existing_classifiers(dir):
     return [int(name.replace(".pth","")) for name in os.listdir(f"../models/{dir}")]
 
+def get_high_conf_classifiers(threshold=0.8):
+    coded_instances = pd.read_json('../data/corpus_validation_hits.json')
+    correct_per_rule = coded_instances.groupby('#')['correct'].mean()
+    return list((correct_per_rule[correct_per_rule>=threshold].index))
+
 def sample_dialog_snippet(dialog_data, n=5):
     dialog = []
     while len(dialog) < n+1:
@@ -142,13 +147,16 @@ def sample_dialog_snippet(dialog_data, n=5):
     return utterances[:-1], utterances[-1], source, id
 
 egp = get_egp()
-def get_generation_prompt(item, unconstrained=False):
+def get_generation_prompt(item, apply_chat_template, unconstrained=False, system_msg=False):
     rules = egp[egp['#'].isin(item['constraints'])]
     constraints = os.linesep.join("- " + rules['SubCategory'] + " - " + rules['guideword'] + ": " + rules['Can-do statement'] + "(CEFR "+rules['Level']+")") 
     context = os.linesep.join([("A" if (i%2==0) else "B") + ": " + utt for i, utt in enumerate(item["context"])])
     instruction = f"Write the response of A"
     instruction += f" and include these grammatical items in the response:\n{constraints}" if not unconstrained else "." 
-    item['prompt'] = f"[INST] {instruction}\nDialog:\n{context} [/INST] \nA: "
-    item['text'] = item['prompt'] + item['response'] + "</s>"
+    item['messages'] = [{"role": "system", "content": "Only output the response"}] if system_msg else []
+    item['messages'] += [{"role": "user", "content": f"{instruction}\nDialog:\n{context}\n"}]
+    item['messages'] += [{"role": "assistant", "content": f"{item['response']}"}]
+    item['prompt'] = apply_chat_template(item['messages'][:-1], tokenize=False, add_generation_prompt=True)
+    item['text'] = apply_chat_template(item['messages'], tokenize=False)
     return item
 
