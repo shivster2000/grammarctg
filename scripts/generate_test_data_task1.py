@@ -37,7 +37,7 @@ num_constraints_list = list(range(1,1+args.max_constraints_per_subcat))
 num_subcats_list = list(range(1,1+args.max_subcats))
 
 # helpers
-classifiers_nrs = helpers.get_existing_classifiers("corpus_training")
+classifiers_nrs = helpers.get_high_conf_classifiers()
 def sample_single_constraints(n_constraints, n_subcats, level=None):
     #if level is None: level = random.choice(egp['Level'].unique())
     if len(args.subcats) < n_subcats: return egp.sample(0)

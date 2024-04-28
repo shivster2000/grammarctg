@@ -26,12 +26,7 @@ dialog_data = data.get_dialog_data(args.test_datasets)
 
 # prepare iterations
 num_subcats_list = list(range(1,1+args.max_subcats))
-levels = list(egp['Level'].unique())
-
-# helpers
-def sample_subcat_constraints(n_subcats):
-    
-    return zip(subcats, subcat_levels)
+levels = ["A1","A2","B1", "B2"] # list(egp['Level'].unique())
 
 # sample and save dataframe
 data = []
@@ -49,4 +44,4 @@ for _ in range(args.num_dialogs):
             'levels': subcat_levels
         })
 testset = pd.DataFrame(data)
-testset.to_json(f'../data/task2_test.json')
+testset.to_json(f'../data/task2/test.json')

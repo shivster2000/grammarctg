@@ -22,19 +22,7 @@ output_file = f'../data/{args.output_file}'
 input_file = f'../data/{args.input_file}'
 egp = data.get_egp()
 nrs = helpers.get_existing_classifiers('corpus_training')
-egp_filtered = egp[egp['#'].isin(nrs)]
 
-def describe_subcat_level(subcat, level):
-    guidewords = egp_filtered[(egp_filtered['Level']==level)&(egp_filtered['SubCategory']==subcat)]['guideword']
-    return f"- {subcat} on CEFR level {level} ({'; '.join(guidewords)})"
-    
-def get_prompt(context, subcats, levels):
-    context = os.linesep.join([("A" if (i%2==0) else "B") + ": " + utt for i, utt in enumerate(context + [""])])
-    
-    return f"""Continue the dialog with one turn and preferably use the following grammar patterns in the response:
-{os.linesep.join([describe_subcat_level(subcat, level) for subcat, level in zip(subcats, levels)])}
-Dialog:
-{context}"""
 
 def get_responses(case):
     prompt=get_prompt(case['context'], case['categories'], case['levels'])

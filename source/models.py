@@ -3,6 +3,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 import os
+os.environ['CACHE_DIR'] = os.environ['FAST_CACHE_DIR'].replace("%SLURM_JOB_ID%", os.getenv('SLURM_JOB_ID')) # speed up model loading
 
 import gc
 import math
@@ -12,7 +13,8 @@ import copy
 import torch
 import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
-from transformers import BertTokenizer, BertModel, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from torch.nn import DataParallel
+from transformers import BertTokenizer, BertModel, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, LogitsProcessor
 from torchmetrics import MetricCollection, classification
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -138,13 +140,13 @@ def get_scores(level_model, candidates, max_len=128, batch_size=128, use_tqdm=Fa
     
     return torch.cat(all_outputs, dim=0)
     
-def train(model, train_dataloader, val_dataloader, num_epochs=3, lr=1e-4, criterion = torch.nn.BCELoss(), optimizer = None, verbose=True):
+def train(model, train_dataloader, val_dataloader, num_epochs=3, lr=1e-4, criterion = torch.nn.BCELoss(), optimizer = None, verbose=True, leave=True):
     """
     This convenience function trains and evaluates a model in the PyTorch framework
     """
     if optimizer is None: optimizer = torch.optim.AdamW(model.parameters(), lr)
     last_val_loss = 2
-    for epoch in tqdm(range(num_epochs if num_epochs else 10), leave=False):
+    for epoch in tqdm(range(num_epochs if num_epochs else 10), leave=leave):
         model.train()
         total_loss = 0
         for batch in tqdm(train_dataloader) if verbose else train_dataloader:
@@ -217,7 +219,7 @@ def save_classifier(classifier, nr, dir):
     trainable_params = {name: param for name, param in classifier.named_parameters() if param.requires_grad}
     torch.save(trainable_params, f'../models/{dir}/{nr}.pth')
 
-def load_classifier(nr, dir):
+def load_classifier(nr, dir, parallel=False):
     """
     Load a grammar classifier from the specified subdirectory in the models directory
     """
@@ -231,6 +233,7 @@ def load_classifier(nr, dir):
             if name_prefixed in trainable_params:
                 param.copy_(trainable_params[name_prefixed])
     classifier.eval()
+    if parallel: classifier = DataParallel(classifier)
     return classifier
 
 def load_generator(model_name= "mistralai/Mistral-7B-Instruct-v0.2", quantized=False):
@@ -239,8 +242,9 @@ def load_generator(model_name= "mistralai/Mistral-7B-Instruct-v0.2", quantized=F
     """
     bnb_config = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_compute_dtype=torch.float16, bnb_4bit_quant_type="nf4")
     model = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=bnb_config if quantized else None, cache_dir=os.getenv('CACHE_DIR'), device_map="auto")
-    model.config.use_cache = False
     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True, cache_dir=os.getenv('CACHE_DIR'), padding_side="right")
+    if "llama" in model_name:
+        tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
 
 def generate(model, tokenizer, prompts, eos_token_id, max_new_tokens=128, batch_size=32, verbose=False, skip_special_tokens=True, do_sample=False):
@@ -255,12 +259,17 @@ def generate(model, tokenizer, prompts, eos_token_id, max_new_tokens=128, batch_
         model_input = tokenizer(batch, return_tensors="pt", padding='max_length', truncation=True, max_length=512).to(device)
         if verbose: print(model_input)
         with torch.no_grad():
-            token_ids = model.generate(**model_input, max_new_tokens=max_new_tokens, pad_token_id=tokenizer.eos_token_id, eos_token_id=eos_token_id,
+            token_ids = model.generate(**model_input,
+                                       max_new_tokens=max_new_tokens,
+                                       pad_token_id=tokenizer.eos_token_id,
+                                       eos_token_id=eos_token_id,
                                        do_sample=do_sample,
                                        temperature=0.6 if do_sample else None,
                                        top_p=0.9 if do_sample else None)
         
-        outputs += tokenizer.batch_decode(token_ids[:,model_input['input_ids'].shape[1]:], skip_special_tokens=skip_special_tokens, device="cpu")
+        outputs += tokenizer.batch_decode(token_ids[:,model_input['input_ids'].shape[1]:],
+                                          skip_special_tokens=skip_special_tokens,
+                                          device="cpu")
         if verbose: print(outputs[-batch_size:])
     tokenizer.padding_side = "right"
     responses = [re.search(r'(.*)(\nB:)?', output.strip()).group(1) for output in outputs]
@@ -280,3 +289,50 @@ def clean_tensors():
             pass
     torch.cuda.empty_cache()
     gc.collect()
+
+def get_top_p_tok_k(prediction, top_p=0.99, top_k=200):
+    sorted_logits, sorted_indices = torch.sort(prediction, descending=True)
+    probs = torch.softmax(sorted_logits, dim=-1)
+    cumulative_probs = torch.cumsum(probs, dim=-1)
+    sorted_indices_to_keep = cumulative_probs <= top_p
+    sorted_indices_to_keep[:,torch.argmax(~sorted_indices_to_keep.int(), dim=-1)] = True # shift to right
+    probs = probs[sorted_indices_to_keep][:top_k]
+    return sorted_indices[sorted_indices_to_keep][:top_k], probs/probs.sum()
+
+class GrammarLogitsProcessor(LogitsProcessor):
+    def __init__(self, tokenizer, classifiers, input_len, alpha):
+        super().__init__()
+        self.tokenizer = tokenizer
+        self.classifiers = classifiers
+        self.input_len = input_len
+        self.alpha = alpha
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        candidate_tokens, _ = get_top_p_tok_k(scores)
+        candidate_sequences = torch.cat([input_ids[:,self.input_len:].expand(len(candidate_tokens), -1), candidate_tokens.unsqueeze(1)], dim=-1)
+        candidates = self.tokenizer.batch_decode(candidate_sequences)
+        grammar_scores = {nr: probe_model(classifier, candidates) for nr, classifier in self.classifiers.items()}
+        new_scores = float('-inf') * torch.ones_like(scores)
+        new_scores[:,candidate_tokens] = scores[:,candidate_tokens]
+        for nr, score in grammar_scores.items():
+            grammar_logits = torch.log(score[0]/score[0].sum() + 1e-9).to(device)
+            grammar_logits = grammar_logits - grammar_logits.mean() # re-center logits
+            new_scores[:,candidate_tokens] = scores[:,candidate_tokens] + self.alpha * grammar_logits
+        return new_scores
+
+def decoding(model, tokenizer, prompt, do_sample=False, constrained=True, alpha=50, classifiers={}):
+    model_input = tokenizer(prompt, return_tensors="pt").to(device)
+    input_len = model_input.input_ids.shape[1]
+    kwargs = {"logits_processor": [GrammarLogitsProcessor(tokenizer, classifiers, input_len, alpha)],
+              "renormalize_logits": True} if constrained else {}
+    
+    token_ids = model.generate(**model_input,
+                               max_new_tokens=128,
+                               pad_token_id=tokenizer.eos_token_id,
+                               eos_token_id=[tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")],
+                               do_sample=do_sample,
+                               temperature=1 if do_sample else None,
+                               top_p=0.95 if do_sample else None,
+                               top_k=300 if do_sample else None,
+                               **kwargs)
+    return tokenizer.batch_decode(token_ids[:,input_len:], skip_special_tokens=True)[0]

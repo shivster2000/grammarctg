@@ -1,9 +1,13 @@
 # This module contains functions for the evaluation of grammar-controlled educational text generation
+import os
+from dotenv import load_dotenv
+load_dotenv()
+os.environ['CACHE_DIR'] = os.environ['FAST_CACHE_DIR'].replace("%SLURM_JOB_ID%", os.getenv('SLURM_JOB_ID')) # speed up model loading
 
 import nltk
-nltk.download("punkt")
+nltk.download("punkt", download_dir=os.getenv('CACHE_DIR'))
+nltk.data.path.insert(0, os.getenv('CACHE_DIR'))
 from nltk.util import ngrams
-import os
 import re
 import numpy as np
 from tqdm import tqdm

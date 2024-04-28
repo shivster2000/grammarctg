@@ -2,42 +2,56 @@ import argparse
 parser = argparse.ArgumentParser(description="Generate constrained responses to task 1")
 parser.add_argument("--n_responses", type=int, default=1, help="Number of responses. Default: %(default)s")
 parser.add_argument("--input_file", type=str, default="task1_test.json", help="Input file name in data directory. Default: %(default)s")
-parser.add_argument("--output_file", type=str, default="task1_test_gpt35.json", help="Output file name in data directory. Default: %(default)s")
+parser.add_argument("--output_file", type=str, default="task1_test_%model%.json", help="Output file name in data directory. Default: %(default)s")
 parser.add_argument("--model", type=str, default="gpt35", help="Model to use. Default: %(default)s")
+parser.add_argument('--decoding', action='store_true', help='Flag to use the decoding strategy')
+parser.add_argument("--label", type=str, default="", help="Label for the files to create. Default: %(default)s")
 parser.add_argument("--max_rows", type=int, default=10, help="Maximum number of rows to process. Default: %(default)s")
 args = parser.parse_args()
 
 # script
 import os
+from dotenv import load_dotenv
+load_dotenv()
+os.environ['CACHE_DIR'] = os.environ['FAST_CACHE_DIR'].replace("%SLURM_JOB_ID%", os.getenv('SLURM_JOB_ID')) # speed up model loading
+
+from tqdm import tqdm
 import pandas as pd
 from pandas.testing import assert_frame_equal
+
 import sys
 sys.path.append(f'../source')
 import data
 import api
-from tqdm import tqdm
+import helpers
+import models
 
-output_file = f'../data/{args.output_file}'
+output_file = f'../data/{args.output_file.replace("%model%", args.label if args.label else args.model)}'
 input_file = f'../data/{args.input_file}'
 egp = data.get_egp()
 
-def get_prompt(context, nrs):
-    rules = egp[egp['#'].isin(nrs)]
-    constraints = os.linesep.join("- " + rules['SubCategory'] + " - " + rules['guideword'] + ": " + rules['Can-do statement'])
-    context = os.linesep.join([("A" if (i%2==0) else "B") + ": " + utt for i, utt in enumerate(context + [""])])
+kwargs = {}
 
-    return f"""Continue the dialog with one turn and show all of these grammar skills in your response.
-Grammar skills:
-{constraints}
-Dialog:
-{context}"""
-
+if "llama" in args.model:
+    if "FT" in args.model:
+        model_string = args.model
+    else:
+        model_string = "meta-llama/Meta-Llama-3-8B-Instruct"
+    model, tokenizer = models.load_generator(model_string, quantized="FT_all" in args.model)
+    kwargs.update({"apply_chat_template": tokenizer.apply_chat_template,
+                  "system_msg": True})
+    
 def get_responses(case):
-    prompt=get_prompt(case['context'], case['constraints'])
-    #print(prompt)
+    case = helpers.get_generation_prompt(case, **kwargs)
+    
     if args.model=="gpt35":
-        return [api.get_openai_chat_completion([{ "role": "user", "content": prompt}])[0] for _ in range(args.n_responses)]
-
+        return api.get_openai_chat_completion(case["messages"][:-1], n=args.n_responses, temperature=0)
+    elif args.decoding:
+        classifiers = {nr: models.load_classifier(nr, "partial_sequences") for nr in case['constraints']}
+        return [models.decoding(model, tokenizer, case['prompt'], constrained=True, classifiers=classifiers)]
+    else:
+        return [models.decoding(model, tokenizer, case['prompt'], constrained=False)]
+    
 # logic
 if os.path.exists(output_file):
     original_testset = pd.read_json(input_file)
@@ -50,9 +64,11 @@ else:
 
 condition = testset['responses'].apply(len)==0
 max_rows = min(args.max_rows, len(testset))
+i = 0
 remaining_testset = testset[condition]
-for idx, case in tqdm(remaining_testset.iterrows(), total=max_rows-(~condition).sum()):
-    if idx >= max_rows: break
+for idx, case in tqdm(remaining_testset.sample(frac=1.).iterrows(), total=max_rows-(~condition).sum()):
+    if i > max_rows: break
+    i+=1
     responses = get_responses(case)
     testset.at[idx, 'responses'] = responses
     testset.to_json(output_file)

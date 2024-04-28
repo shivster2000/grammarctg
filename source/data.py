@@ -139,7 +139,7 @@ def flatten_list_of_lists(list_of_lists):
     return [item for sublist in list_of_lists for item in sublist]
 
 class TextCorpora():
-    def __init__(self, names=['gutenberg', 'brown', 'reuters'], verbose=False):
+    def __init__(self, names=['brown', 'reuters'], verbose=False):
         self.sentences = {}
         for name in names:
             if verbose: print(f"Loading {name}")
@@ -151,13 +151,12 @@ class TextCorpora():
     def get_all_sentences(self):
         return flatten_list_of_lists(self.sentences.values())
 
-def get_mixed_sentences(n_per_corpus=1000):
+def get_mixed_sentences(n_per_corpus=1000, corpora = [DailyDialog, DialogSum, WoW, CEFRTexts], shuffle=False):
     sentences = []
-    corpora = [DailyDialog, DialogSum, WoW, CEFRTexts]
     for i, corpus in tqdm(enumerate(corpora), total=len(corpora)):
         corpus_inst = corpus()
         corpus_sents = corpus_inst.get_all_sentences()
-        random.shuffle(corpus_sents)
+        if shuffle: random.shuffle(corpus_sents)
         sentences += set(corpus_sents)
         sentences = sentences[:(i+1)*n_per_corpus]
     return sentences
