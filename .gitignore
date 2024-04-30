@@ -11,4 +11,5 @@ cloud.txt
 **/.ipynb_checkpoints
 **slurm**
 **wandb**
-models/mistral*
+models/partial_sequences/
+data/SFT_data*
