@@ -317,7 +317,7 @@ class GrammarLogitsProcessor(LogitsProcessor):
         for nr, score in grammar_scores.items():
             grammar_logits = torch.log(score[0]/score[0].sum() + 1e-9).to(device)
             grammar_logits = grammar_logits - grammar_logits.mean() # re-center logits
-            new_scores[:,candidate_tokens] = scores[:,candidate_tokens] + self.alpha * grammar_logits
+            new_scores[:,candidate_tokens] = new_scores[:,candidate_tokens] + self.alpha * grammar_logits
         return new_scores
 
 def decoding(model, tokenizer, prompt, do_sample=False, constrained=True, alpha=50, classifiers={}):

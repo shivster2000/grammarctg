@@ -146,20 +146,26 @@ def sample_dialog_snippet(dialog_data, n=5):
     utterances = dialog[index:index+n]
     return utterances[:-1], utterances[-1], source, id
 
+def format_context(context):
+    return os.linesep.join([("A" if (i%2==0) else "B") + ": " + utt for i, utt in enumerate(context)])
+
 egp = get_egp()
-def get_generation_prompt(item, apply_chat_template=None, unconstrained=False, system_msg=False):
-    rules = egp[egp['#'].isin(item['constraints'])]
-    constraints = os.linesep.join("- " + rules['SubCategory'] + " - " + rules['guideword'] + ": " + rules['Can-do statement'] + "(CEFR "+rules['Level']+")") 
-    context = os.linesep.join([("A" if (i%2==0) else "B") + ": " + utt for i, utt in enumerate(item["context"])])
+
+def get_messages(instruction, item, apply_chat_template, system_msg):
     item['messages'] = [{"role": "system", "content": "Only output A's response."}] if system_msg else []
-    instruction = f"Given the dialog, write a possible next turn of A that includes all of these grammatical items:"
-    instruction += f"\n{constraints}" if not unconstrained else "" 
-    item['messages'] += [{"role": "user", "content": f"{instruction}\nDialog:\n{context}\n"}]
+    item['messages'] += [{"role": "user", "content": f"{instruction}\nDialog:\n{format_context(item['context'])}\n"}]
     item['messages'] += [{"role": "assistant", "content": f"{item['response']}"}]
     if apply_chat_template:
         item['prompt'] = apply_chat_template(item['messages'][:-1], tokenize=False, add_generation_prompt=True)
         item['text'] = apply_chat_template(item['messages'], tokenize=False)
     return item
+
+def get_generation_prompt(item, apply_chat_template=None, unconstrained=False, system_msg=False):
+    rules = egp[egp['#'].isin(item['constraints'])]
+    constraints = os.linesep.join("- " + rules['SubCategory'] + " - " + rules['guideword'] + ": " + rules['Can-do statement'] + "(CEFR "+rules['Level']+")") 
+    instruction = f"Given the dialog, write a possible next turn of A that includes all of these grammatical items:"
+    instruction += f"\n{constraints}" if not unconstrained else "" 
+    return get_messages(instruction, item, apply_chat_template, system_msg)
 
 
 level_order = {"A1": 0, "A2": 1, "B1": 2, "B2": 3, "C1": 4, "C2": 5}
@@ -171,9 +177,14 @@ def get_preferred_nrs(subcat, level, harder=False, easier=False):
     if not harder and not easier: 
         return list(egp_filtered[(egp_filtered['Level']==level)&cat_filter]['#'])
     nrs = []
-    if harder: nrs = nrs + egp_filtered[(egp_filtered['LevelNr']>level_order[level])&cat_filter]['#']
-    if easier: nrs = nrs + egp_filtered[(egp_filtered['LevelNr']<level_order[level])&cat_filter]['#']
-    return nrs
+    levels = []
+    if harder:
+        nrs = nrs + list(egp_filtered[(egp_filtered['LevelNr']>level_order[level])&cat_filter]['#'])
+        levels = levels + list(egp_filtered[(egp_filtered['LevelNr']>level_order[level])&cat_filter]['Level'])
+    if easier:
+        nrs = nrs + list(egp_filtered[(egp_filtered['LevelNr']<level_order[level])&cat_filter]['#'])
+        levels = levels + list(egp_filtered[(egp_filtered['LevelNr']<level_order[level])&cat_filter]['Level'])
+    return nrs, levels
 
 def describe_subcat_level(subcat, level):
     preferred = egp_filtered[(egp_filtered['Level']==level)&(egp_filtered['SubCategory']==subcat)]
@@ -181,13 +192,6 @@ def describe_subcat_level(subcat, level):
     
 def get_prompt_task_2(item, apply_chat_template=None, unconstrained=False, system_msg=False):
     constraints = os.linesep.join([describe_subcat_level(subcat, level) for subcat, level in zip(item['categories'], item['levels'])])
-    context = os.linesep.join([("A" if (i%2==0) else "B") + ": " + utt for i, utt in enumerate(item["context"])])
-    item['messages'] = [{"role": "system", "content": "Only output A's response."}] if system_msg else []
     instruction = f"Given the dialog, write a possible next turn of A that preferably use the following grammar patterns in the response:"
     instruction += f"\n{constraints}" if not unconstrained else "" 
-    item['messages'] += [{"role": "user", "content": f"{instruction}\nDialog:\n{context}\n"}]
-    item['messages'] += [{"role": "assistant", "content": f"{item['response']}"}]
-    if apply_chat_template:
-        item['prompt'] = apply_chat_template(item['messages'][:-1], tokenize=False, add_generation_prompt=True)
-        item['text'] = apply_chat_template(item['messages'], tokenize=False)
-    return item
+    return get_messages(instruction, item, apply_chat_template, system_msg)

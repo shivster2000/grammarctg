@@ -1,11 +1,8 @@
 import argparse
 parser = argparse.ArgumentParser(description='Run evaluation suite for task 1.')
-parser.add_argument('--models', nargs='+', default=["gpt35"],
-                    help='List of input files')
-parser.add_argument('--skip_response_quality', action='store_true',
-                    help='Flag to evaluate quality')
-parser.add_argument('--max_rows', type=int, default=10,
-                    help='Maximum number of rows to process')
+parser.add_argument('--models', nargs='+', default=["gpt35"], help='List of input files')
+parser.add_argument('--skip_response_quality', action='store_true', help='Flag to evaluate quality')
+parser.add_argument('--max_rows', type=int, default=10, help='Maximum number of rows to process')
 
 args = parser.parse_args()
 
@@ -24,8 +21,8 @@ import evaluation
 
 # logic
 for model in args.models:
-    input_file = f'../data/task1_test_{model}.json'
-    output_file = f'../data/task1_test_{model}_eval.json'
+    input_file = f'../data/task1/{model}.json'
+    output_file = f'../data/task1/{model}_eval.json'
     if not os.path.exists(output_file):
         testset = pd.read_json(input_file)
         testset['positive_constraints'] = [[]] * len(testset)
@@ -34,12 +31,10 @@ for model in args.models:
     else: 
         testset = pd.read_json(output_file)
             
-    condition = (testset['responses'].apply(len)>0) & testset['Relevance'].isna()
-    max_rows = min(args.max_rows, len(testset))
     i = 0
-    subset = testset[condition]
-
-    for idx, case in tqdm(subset.sample(frac=1.).iterrows(), total=max(max_rows-(~condition).sum(), 0), desc="Responses"):
+    subset = testset[(testset['responses'].apply(len)>0) & testset['Relevance'].isna()]
+    max_rows = min(args.max_rows, len(subset))
+    for idx, case in tqdm(subset.sample(frac=1.).iterrows(), total=max_rows, desc="Responses"):
         if i >= max_rows: break
         i+=1
         metrics = evaluation.evaluate(case['context'], case['responses'][0], case['constraints'], evaluate_quality=not args.skip_response_quality)

@@ -1,8 +1,7 @@
 import argparse
 parser = argparse.ArgumentParser(description="Generate constrained responses to task 1")
 parser.add_argument("--n_responses", type=int, default=1, help="Number of responses. Default: %(default)s")
-parser.add_argument("--input_file", type=str, default="task1_test.json", help="Input file name in data directory. Default: %(default)s")
-parser.add_argument("--output_file", type=str, default="task1_test_%model%.json", help="Output file name in data directory. Default: %(default)s")
+parser.add_argument("--input_file", type=str, default="test.json", help="Input file name in data directory. Default: %(default)s")
 parser.add_argument("--model", type=str, default="gpt35", help="Model to use. Default: %(default)s")
 parser.add_argument('--decoding', action='store_true', help='Flag to use the decoding strategy')
 parser.add_argument("--label", type=str, default="", help="Label for the files to create. Default: %(default)s")
@@ -21,17 +20,15 @@ from pandas.testing import assert_frame_equal
 
 import sys
 sys.path.append(f'../source')
-import data
 import api
 import helpers
 import models
 
-output_file = f'../data/{args.output_file.replace("%model%", args.label if args.label else args.model)}'
-input_file = f'../data/{args.input_file}'
-egp = data.get_egp()
+input_file = f'../data/task1/{args.input_file}'
+output_file = f'../data/task1/{args.label if args.label else args.model}.json'
+
 
 kwargs = {}
-
 if "llama" in args.model:
     if "FT" in args.model:
         model_string = args.model
@@ -62,11 +59,10 @@ else:
     testset = pd.read_json(input_file)
     testset['responses'] = [[]] * len(testset)
 
-condition = testset['responses'].apply(len)==0
-max_rows = min(args.max_rows, len(testset))
 i = 0
-remaining_testset = testset[condition]
-for idx, case in tqdm(remaining_testset.sample(frac=1.).iterrows(), total=max_rows-(~condition).sum()):
+remaining_testset = testset[testset['responses'].apply(len)==0]
+max_rows = min(args.max_rows, len(remaining_testset))
+for idx, case in tqdm(remaining_testset.sample(frac=1.).iterrows(), total=max_rows):
     if i > max_rows: break
     i+=1
     responses = get_responses(case)

@@ -17,20 +17,18 @@ random.seed(os.getenv("RANDOM_SEED"))
 # params
 out_file = '../data/corpus_classification_all.pkl'
 dir="corpus_training"
-max_responses = int(1e6)
 n = 4
 batch_size = 256
 
 # load data
 dialog_data = data.get_dialog_data()
-random.shuffle(dialog_data)
 classifiers_nrs = helpers.get_existing_classifiers(dir)
 egp = helpers.get_egp()
 
 # preprocess
 extracts = [[(dialog[0][i-n:i], dialog[0][i], dialog[1]) for i in range(n, len(dialog[0]))] for dialog in dialog_data]
 extracts = helpers.flatten_list_of_lists(extracts)
-extracts = extracts[0:max_responses]
+#extracts = extracts[0:max_responses]
 sentences = [(idx, sentence) for idx, (context, response, source) in tqdm(enumerate(extracts), total=len(extracts)) for sentence in data.sent_tokenize(response)]
 indices, sents = [s[0] for s in sentences], [s[1] for s in sentences]
 
