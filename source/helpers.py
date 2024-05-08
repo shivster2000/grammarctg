@@ -151,8 +151,8 @@ def format_context(context):
 
 egp = get_egp()
 
-def get_messages(instruction, item, apply_chat_template, system_msg):
-    item['messages'] = [{"role": "system", "content": "Only output A's response."}] if system_msg else []
+def get_messages(instruction, item, apply_chat_template, system_msg, next_speaker="A"):
+    item['messages'] = [{"role": "system", "content": f"Only output {next_speaker}'s response."}] if system_msg else []
     item['messages'] += [{"role": "user", "content": f"{instruction}\nDialog:\n{format_context(item['context'])}\n"}]
     item['messages'] += [{"role": "assistant", "content": f"{item['response']}"}]
     if apply_chat_template:
@@ -163,9 +163,10 @@ def get_messages(instruction, item, apply_chat_template, system_msg):
 def get_generation_prompt(item, apply_chat_template=None, unconstrained=False, system_msg=False):
     rules = egp[egp['#'].isin(item['constraints'])]
     constraints = os.linesep.join("- " + rules['SubCategory'] + " - " + rules['guideword'] + ": " + rules['Can-do statement'] + "(CEFR "+rules['Level']+")") 
-    instruction = f"Given the dialog, write a possible next turn of A that includes all of these grammatical items:"
+    next_speaker = "A" if len(item['context']) % 2 == 0 else "B"
+    instruction = f"Given the dialog, write a possible next turn of {next_speaker} that includes all of these grammatical items:"
     instruction += f"\n{constraints}" if not unconstrained else "" 
-    return get_messages(instruction, item, apply_chat_template, system_msg)
+    return get_messages(instruction, item, apply_chat_template, system_msg, next_speaker)
 
 
 level_order = {"A1": 0, "A2": 1, "B1": 2, "B2": 3, "C1": 4, "C2": 5}

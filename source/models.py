@@ -85,14 +85,25 @@ class RuleDetector(torch.nn.Module):
         with torch.no_grad():
             outputs = self.bert(input_ids, attention_mask)
             x = torch.cat(outputs.hidden_states, dim=-1)
-        x = self.dropout(x)
-        x = self.hidden(x)
-        x = self.relu(x)
-        x = self.output(x)
-        x = self.sigmoid(x)
-        x = x * attention_mask.unsqueeze(-1)
-        max_values, max_indices = torch.max(x, 1)
-        return max_values.flatten(), max_indices.flatten()
+            x = self.dropout(x)
+            x = self.hidden(x)
+            x = self.relu(x)
+            x = self.output(x)
+            x = self.sigmoid(x)
+            x = x * attention_mask.unsqueeze(-1)
+            max_values, max_indices = torch.max(x, 1)
+            return max_values.flatten(), max_indices.flatten()
+
+    def forward_bert(self, x, attention_mask):
+        with torch.no_grad():
+            x = self.dropout(x)
+            x = self.hidden(x)
+            x = self.relu(x)
+            x = self.output(x)
+            x = self.sigmoid(x)
+            x = x * attention_mask.unsqueeze(-1)
+            max_values, max_indices = torch.max(x, 1)
+            return max_values.flatten(), max_indices.flatten()
 
 bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', cache_dir=os.getenv('CACHE_DIR'))
 backbone_model = BertModel.from_pretrained('bert-base-uncased', cache_dir=os.getenv('CACHE_DIR'), output_hidden_states=True).to(device)
