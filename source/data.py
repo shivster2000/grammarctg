@@ -206,7 +206,7 @@ def get_dataset(positives, negatives, others, tokenizer, max_len, others_ratio =
     unique_negative = list(set(negatives).difference(set(positives))) # remove duplicates and positives
     num_rands = int(others_ratio * len(unique_negative))
     random.shuffle(others)
-    print(num_rands)
+    if verbose: print(num_rands)
     sentences = unique_positive + unique_negative + others[:num_rands]
     labels = [1] * len(unique_positive) + [0] * len(unique_negative) + [0] * len(others[:num_rands])
     if verbose: print(sum(labels) / len(labels))

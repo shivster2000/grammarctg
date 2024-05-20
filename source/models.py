@@ -82,17 +82,16 @@ class RuleDetector(torch.nn.Module):
         })
     
     def forward(self, input_ids, attention_mask):
-        with torch.no_grad():
-            outputs = self.bert(input_ids, attention_mask)
-            x = torch.cat(outputs.hidden_states, dim=-1)
-            x = self.dropout(x)
-            x = self.hidden(x)
-            x = self.relu(x)
-            x = self.output(x)
-            x = self.sigmoid(x)
-            x = x * attention_mask.unsqueeze(-1)
-            max_values, max_indices = torch.max(x, 1)
-            return max_values.flatten(), max_indices.flatten()
+        outputs = self.bert(input_ids, attention_mask)
+        x = torch.cat(outputs.hidden_states, dim=-1)
+        x = self.dropout(x)
+        x = self.hidden(x)
+        x = self.relu(x)
+        x = self.output(x)
+        x = self.sigmoid(x)
+        x = x * attention_mask.unsqueeze(-1)
+        max_values, max_indices = torch.max(x, 1)
+        return max_values.flatten(), max_indices.flatten()
 
     def forward_bert(self, x, attention_mask):
         with torch.no_grad():
@@ -157,7 +156,7 @@ def train(model, train_dataloader, val_dataloader, num_epochs=3, lr=1e-4, criter
     """
     if optimizer is None: optimizer = torch.optim.AdamW(model.parameters(), lr)
     last_val_loss = 2
-    for epoch in tqdm(range(num_epochs if num_epochs else 10), leave=leave):
+    for epoch in tqdm(range(num_epochs if num_epochs else 100), leave=leave):
         model.train()
         total_loss = 0
         for batch in tqdm(train_dataloader) if verbose else train_dataloader:
@@ -221,7 +220,7 @@ def score_corpus(model, dataloader, max_positive=10, max_batches=10, threshold=0
             all_values.extend(values.cpu().tolist())
             all_max_tokens.extend(indices.cpu().tolist())
             if np.sum(np.array(all_values)>threshold) > max_positive: break
-    return all_values, all_max_tokens
+    return all_values, all_max_tokens, batches
 
 def save_classifier(classifier, nr, dir):
     """
