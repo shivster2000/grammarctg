@@ -297,8 +297,9 @@ def clean_tensors():
                     del obj
         except:
             pass
-    torch.cuda.empty_cache()
     gc.collect()
+    torch.cuda.empty_cache()
+    
 
 def get_top_p_tok_k(prediction, top_p=0.99, top_k=200):
     sorted_logits, sorted_indices = torch.sort(prediction, descending=True)
