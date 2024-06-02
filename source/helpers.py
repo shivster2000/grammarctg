@@ -161,11 +161,13 @@ def get_messages(instruction, item, apply_chat_template, system_msg, next_speake
     return item
 
 def get_generation_prompt(item, apply_chat_template=None, unconstrained=False, system_msg=False):
-    rules = egp[egp['#'].isin(item['constraints'])]
-    constraints = os.linesep.join("- " + rules['SubCategory'] + " - " + rules['guideword'] + ": " + rules['Can-do statement'] + "(CEFR "+rules['Level']+")") 
+    if not unconstrained:
+        rules = egp[egp['#'].isin(item['constraints'])]
+        constraints = os.linesep.join("- " + rules['SubCategory'] + " - " + rules['guideword'] + ": " + rules['Can-do statement'] + "(CEFR "+rules['Level']+")") 
     next_speaker = "A" if len(item['context']) % 2 == 0 else "B"
-    instruction = f"Given the dialog, write a possible next turn of {next_speaker} that includes all of these grammatical items:"
-    instruction += f"\n{constraints}" if not unconstrained else "" 
+    
+    instruction = f"Given the dialog, write a possible next turn of {next_speaker}"
+    instruction += f"' that includes all of these grammatical items:'\n{constraints}" if not unconstrained else "." 
     return get_messages(instruction, item, apply_chat_template, system_msg, next_speaker)
 
 

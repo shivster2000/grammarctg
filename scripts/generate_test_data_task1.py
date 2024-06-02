@@ -6,6 +6,7 @@ parser.add_argument("--max_subcats", type=int, default=3, help="Maximum number o
 parser.add_argument("--num_dialogs", type=int, default=100, help="Number of dialogs")
 parser.add_argument("--test_datasets", type=str, nargs='+', choices=["DialogSum", "DailyDialog", "WoW", "CMUDoG", "ToC"], default=["CMUDoG", "ToC"], help="Datasets to include")
 parser.add_argument("--subcats", type=str, nargs='+', default=["would", "negation", "superlatives"], help="Subcategories to consider")
+parser.add_argument("--output_file", type=str, default='test', help="Output filename")
 parser.add_argument("--input_file", type=str, default='../data/corpus_classification_all.pkl', help="Input file with classified corpus")
 parser.add_argument("--num_per_single_constraint", type=int, default=25, help="Number of dialogs per single constraint")
 args = parser.parse_args()
@@ -77,7 +78,7 @@ for _ in range(args.num_dialogs):
     for num_constraints in num_constraints_list:
         for num_subcats in num_subcats_list:
             constraints = sample_single_constraints(num_constraints, num_subcats)
-            if len(constraints)<=1: continue
+            if args.num_per_single_constraint > 0 and len(constraints)<=1: continue
             data.append({
                 'context': context,
                 'response': response,
@@ -89,4 +90,4 @@ for _ in range(args.num_dialogs):
             })
 
 testset = pd.DataFrame(data)
-testset.to_json(f'../data/task1_test.json')
+testset.to_json(f'../data/task1/{args.output_file}.json')

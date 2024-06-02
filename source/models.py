@@ -5,16 +5,21 @@ load_dotenv()
 import os
 os.environ['CACHE_DIR'] = os.environ['FAST_CACHE_DIR'].replace("%SLURM_JOB_ID%", os.getenv('SLURM_JOB_ID')) # speed up model loading
 
+import nltk
+nltk.download("punkt", download_dir=os.getenv('CACHE_DIR'))
+nltk.data.path.insert(0, os.getenv('CACHE_DIR'))
+from nltk.tokenize import sent_tokenize
 import gc
 import math
 import re
 from tqdm import tqdm
 import copy
+import time
 import torch
 import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
 from torch.nn import DataParallel
-from transformers import BertTokenizer, BertModel, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, LogitsProcessor
+from transformers import BertTokenizer, BertModel, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, LogitsProcessor, EpsilonLogitsWarper, TopKLogitsWarper, TopPLogitsWarper
 from torchmetrics import MetricCollection, classification
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -257,11 +262,12 @@ def load_generator(model_name= "mistralai/Mistral-7B-Instruct-v0.2", quantized=F
         tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
 
-def generate(model, tokenizer, prompts, eos_token_id, max_new_tokens=128, batch_size=32, verbose=False, skip_special_tokens=True, do_sample=False):
+def generate(model, tokenizer, prompts, eos_token_id=None, max_new_tokens=128, batch_size=32, verbose=False, skip_special_tokens=True, do_sample=False):
     """
     This generates tokens and returns the decoded and extracted response to the dialog generation task
     """
     tokenizer.padding_side = "left"
+    if eos_token_id == None: eos_token_id = tokenizer.eos_token_id
     model.eval()
     outputs = []
     for i in tqdm(range(0, len(prompts), batch_size), total=math.ceil(len(prompts)/batch_size), desc="Generate"):
@@ -301,46 +307,64 @@ def clean_tensors():
     torch.cuda.empty_cache()
     
 
-def get_top_p_tok_k(prediction, top_p=0.99, top_k=200):
-    sorted_logits, sorted_indices = torch.sort(prediction, descending=True)
-    probs = torch.softmax(sorted_logits, dim=-1)
-    cumulative_probs = torch.cumsum(probs, dim=-1)
-    sorted_indices_to_keep = cumulative_probs <= top_p
-    sorted_indices_to_keep[:,torch.argmax(~sorted_indices_to_keep.int(), dim=-1)] = True # shift to right
-    probs = probs[sorted_indices_to_keep][:top_k]
-    return sorted_indices[sorted_indices_to_keep][:top_k], probs/probs.sum()
-
 class GrammarLogitsProcessor(LogitsProcessor):
-    def __init__(self, tokenizer, classifiers, input_len, alpha):
+    def __init__(self, tokenizer, classifiers, input_len, alpha, timing=False):
         super().__init__()
         self.tokenizer = tokenizer
         self.classifiers = classifiers
+        self.timing = timing
         self.input_len = input_len
         self.alpha = alpha
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        candidate_tokens, _ = get_top_p_tok_k(scores)
-        candidate_sequences = torch.cat([input_ids[:,self.input_len:].expand(len(candidate_tokens), -1), candidate_tokens.unsqueeze(1)], dim=-1)
-        candidates = self.tokenizer.batch_decode(candidate_sequences)
-        grammar_scores = {nr: probe_model(classifier, candidates) for nr, classifier in self.classifiers.items()}
-        new_scores = float('-inf') * torch.ones_like(scores)
-        new_scores[:,candidate_tokens] = scores[:,candidate_tokens]
+        start = time.time()
+        # Find possible tokens and form sentences from them
+        entry, candidate_tokens = torch.where(~scores.isneginf())
+        candidate_sequences = torch.cat([input_ids[entry,self.input_len:], candidate_tokens.unsqueeze(1)], dim=-1)
+        candidates = self.tokenizer.batch_decode(candidate_sequences, skip_special_tokens=True)
+        #candidates = [sent_tokenize(c)[-1] for c in candidates]
+        if self.timing: print(f"Decoding: {time.time()-start}")
+
+        # Grammar scoring
+        start = time.time()
+        tokenized_inputs = bert_tokenizer(candidates, return_tensors='pt', max_length=64, padding='max_length', truncation=True)
+        tokenized_inputs = {key: value.to(device) for key, value in tokenized_inputs.items()}
+        encoded_inputs = bert_encoder(**tokenized_inputs) # encoding is the same for all classifiers
+        x = torch.cat(encoded_inputs.hidden_states, dim=-1)
+        with torch.no_grad():
+            grammar_scores = {nr: clf.forward_bert(x, tokenized_inputs['attention_mask']) for nr, clf in self.classifiers.items()}
+        if self.timing: print(f"Scoring: {time.time()-start}")
+            
+        # Adapt scores
+        start = time.time()
         for nr, score in grammar_scores.items():
-            grammar_logits = torch.log(score[0]/score[0].sum() + 1e-9).to(device)
-            grammar_logits = grammar_logits - grammar_logits.mean() # re-center logits
-            new_scores[:,candidate_tokens] = new_scores[:,candidate_tokens] + self.alpha * grammar_logits
-        return new_scores
+            for i in entry.unique():
+                mask = entry==i.item()
+                grammar_logits = torch.log(score[0][mask]/score[0][mask].sum() + 1e-9)
+                scores[i.item(),candidate_tokens[mask]] += self.alpha * grammar_logits
+        if self.timing: print(f"Score Adaptation: {time.time()-start}")
+        return scores
 
 def decoding(model, tokenizer, prompt, do_sample=False, constrained=True, alpha=50, classifiers={}):
-    model_input = tokenizer(prompt, return_tensors="pt").to(device)
+    model_input=tokenizer(prompt, return_tensors="pt").to(device)
     input_len = model_input.input_ids.shape[1]
-    kwargs = {"logits_processor": [GrammarLogitsProcessor(tokenizer, classifiers, input_len, alpha)],
-              "renormalize_logits": True} if constrained else {}
+
+    #eps = EpsilonLogitsWarper(epsilon=1e-3)
+    top_p = TopPLogitsWarper(top_p=0.99)
+    top_k = TopKLogitsWarper(top_k=200)
+    gram = GrammarLogitsProcessor(tokenizer, classifiers, input_len, alpha)
     
+    kwargs = {"logits_processor": [top_p, top_k, gram],
+              "renormalize_logits": True} if constrained else {}
+
+    sequence_bias = {token: 2.5 for token in [(0,), (13,), (30,)]}
     token_ids = model.generate(**model_input,
                                max_new_tokens=128,
                                pad_token_id=tokenizer.eos_token_id,
-                               eos_token_id=[tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")],
+                               eos_token_id=tokenizer.eos_token_id,
+                               sequence_bias=sequence_bias if constrained else None,
+                               #exponential_decay_length_penalty=(25, 1.01),
+                               num_beams=1,
                                do_sample=do_sample,
                                temperature=1 if do_sample else None,
                                top_p=0.95 if do_sample else None,
