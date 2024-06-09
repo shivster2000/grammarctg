@@ -19,6 +19,7 @@ import torch
 import numpy as np
 from torch.utils.data import TensorDataset, DataLoader
 from torch.nn import DataParallel
+import torch.nn.functional as F
 from transformers import BertTokenizer, BertModel, AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, LogitsProcessor, EpsilonLogitsWarper, TopKLogitsWarper, TopPLogitsWarper
 from torchmetrics import MetricCollection, classification
 
@@ -320,6 +321,7 @@ class GrammarLogitsProcessor(LogitsProcessor):
         start = time.time()
         # Find possible tokens and form sentences from them
         entry, candidate_tokens = torch.where(~scores.isneginf())
+        if len(candidate_tokens.unique()) == 1: return scores
         candidate_sequences = torch.cat([input_ids[entry,self.input_len:], candidate_tokens.unsqueeze(1)], dim=-1)
         candidates = self.tokenizer.batch_decode(candidate_sequences, skip_special_tokens=True)
         #candidates = [sent_tokenize(c)[-1] for c in candidates]
@@ -330,40 +332,37 @@ class GrammarLogitsProcessor(LogitsProcessor):
         tokenized_inputs = bert_tokenizer(candidates, return_tensors='pt', max_length=64, padding='max_length', truncation=True)
         tokenized_inputs = {key: value.to(device) for key, value in tokenized_inputs.items()}
         encoded_inputs = bert_encoder(**tokenized_inputs) # encoding is the same for all classifiers
-        x = torch.cat(encoded_inputs.hidden_states, dim=-1)
         with torch.no_grad():
-            grammar_scores = {nr: clf.forward_bert(x, tokenized_inputs['attention_mask']) for nr, clf in self.classifiers.items()}
+            x = torch.cat(encoded_inputs.hidden_states, dim=-1)
+            grammar_scores = torch.vstack([clf.forward_bert(x, tokenized_inputs['attention_mask'])[0] for clf in self.classifiers.values()])
         if self.timing: print(f"Scoring: {time.time()-start}")
             
         # Adapt scores
         start = time.time()
-        for nr, score in grammar_scores.items():
-            for i in entry.unique():
-                mask = entry==i.item()
-                grammar_logits = torch.log(score[0][mask]/score[0][mask].sum() + 1e-9)
-                scores[i.item(),candidate_tokens[mask]] += self.alpha * grammar_logits
+        for i in entry.unique().cpu().tolist():
+            mask = entry==i
+            grammar_logits = (grammar_scores[:,mask] - grammar_scores[:,mask].mean(dim=1, keepdim=True)).max(dim=0).values
+            grammar_logits = torch.log(F.softmax(grammar_logits, dim=0))
+            scores[i,candidate_tokens[mask]] = (1-self.alpha)*scores[i,candidate_tokens[mask]] + self.alpha * grammar_logits
+
         if self.timing: print(f"Score Adaptation: {time.time()-start}")
         return scores
 
-def decoding(model, tokenizer, prompt, do_sample=False, constrained=True, alpha=50, classifiers={}):
+def decoding(model, tokenizer, prompt, do_sample=False, constrained=True, alpha=0.99, classifiers={}):
     model_input=tokenizer(prompt, return_tensors="pt").to(device)
     input_len = model_input.input_ids.shape[1]
 
-    #eps = EpsilonLogitsWarper(epsilon=1e-3)
-    top_p = TopPLogitsWarper(top_p=0.99)
+    min_p = EpsilonLogitsWarper(epsilon=1e-3)
     top_k = TopKLogitsWarper(top_k=200)
     gram = GrammarLogitsProcessor(tokenizer, classifiers, input_len, alpha)
     
-    kwargs = {"logits_processor": [top_p, top_k, gram],
+    kwargs = {"logits_processor": [min_p, top_k, gram],
               "renormalize_logits": True} if constrained else {}
 
-    sequence_bias = {token: 2.5 for token in [(0,), (13,), (30,)]}
     token_ids = model.generate(**model_input,
                                max_new_tokens=128,
                                pad_token_id=tokenizer.eos_token_id,
-                               eos_token_id=tokenizer.eos_token_id,
-                               sequence_bias=sequence_bias if constrained else None,
-                               #exponential_decay_length_penalty=(25, 1.01),
+                               eos_token_id=[tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")],
                                num_beams=1,
                                do_sample=do_sample,
                                temperature=1 if do_sample else None,

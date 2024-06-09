@@ -7,7 +7,7 @@ parser.add_argument('--decoding', action='store_true', help='Flag to use the dec
 parser.add_argument("--label", type=str, default="", help="Label for the files to create. Default: %(default)s")
 parser.add_argument("--max_rows", type=int, default=10, help="Maximum number of rows to process. Default: %(default)s")
 parser.add_argument("--time", action='store_true', help="Flag to report timing.")
-parser.add_argument("--alpha", type=int, default=50, help="Decoding hyperparameter.")
+parser.add_argument("--alpha", type=float, default=0.5, help="Decoding hyperparameter.")
 args = parser.parse_args()
 
 # script
@@ -67,7 +67,7 @@ i = 0
 remaining_testset = testset[testset['responses'].apply(len)==0]
 max_rows = min(args.max_rows, len(remaining_testset))
 
-for idx, case in tqdm(remaining_testset.sample(frac=1.).iterrows(), total=max_rows):
+for idx, case in tqdm(remaining_testset.sample(frac=1., random_state=26).iterrows(), total=max_rows):
     if i > max_rows: break
     i+=1
     
