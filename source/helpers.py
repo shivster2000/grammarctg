@@ -176,7 +176,7 @@ egp_filtered = egp[egp['#'].isin(get_high_conf_classifiers())].copy()
 egp_filtered['LevelNr'] = egp_filtered['Level'].apply(lambda x: level_order[x])
 
 def get_preferred_nrs(subcat, level, harder=False, easier=False):
-    cat_filter = egp_filtered['SubCategory']==subcat
+    cat_filter = egp_filtered['SubCategory']==subcat if subcat else True
     if not harder and not easier: 
         return list(egp_filtered[(egp_filtered['Level']==level)&cat_filter]['#'])
     nrs = []
@@ -195,6 +195,13 @@ def describe_subcat_level(subcat, level):
     
 def get_prompt_task_2(item, apply_chat_template=None, unconstrained=False, system_msg=False):
     constraints = os.linesep.join([describe_subcat_level(subcat, level) for subcat, level in zip(item['categories'], item['levels'])])
-    instruction = f"Given the dialog, write a possible next turn of A that preferably use the following grammar patterns in the response:"
+    instruction = f"Given the dialog, write a possible next turn of A that preferably uses the following grammar patterns in the response:"
     instruction += f"\n{constraints}" if not unconstrained else "" 
     return get_messages(instruction, item, apply_chat_template, system_msg)
+
+
+def get_prompt_task_3(item, apply_chat_template=None, system_msg=False):
+    next_speaker = "A" if len(item['context']) % 2 == 0 else "B"
+    instruction = f"Given the dialog, write a possible next turn of {next_speaker} that uses grammatical items on CEFR level {item['level']}."
+    return get_messages(instruction, item, apply_chat_template, system_msg)
+

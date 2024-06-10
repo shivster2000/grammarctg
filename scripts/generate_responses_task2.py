@@ -7,6 +7,8 @@ parser.add_argument("--model", type=str, default="gpt35", help="Model to use. De
 parser.add_argument('--decoding', action='store_true', help='Flag to use the decoding strategy')
 parser.add_argument("--label", type=str, default="", help="Label for the files to create. Default: %(default)s")
 parser.add_argument("--max_rows", type=int, default=10, help="Maximum number of rows to process. Default: %(default)s")
+parser.add_argument("--time", action='store_true', help="Flag to report timing.")
+parser.add_argument("--alpha", type=float, default=0.5, help="Decoding hyperparameter.")
 args = parser.parse_args()
 
 # script
@@ -18,6 +20,7 @@ os.environ['CACHE_DIR'] = os.environ['FAST_CACHE_DIR'].replace("%SLURM_JOB_ID%",
 from tqdm import tqdm
 import pandas as pd
 from pandas.testing import assert_frame_equal
+import time
 
 import sys
 sys.path.append(f'../source')
@@ -34,7 +37,7 @@ if "llama" in args.model:
         model_string = args.model
     else:
         model_string = "meta-llama/Meta-Llama-3-8B-Instruct"
-    model, tokenizer = models.load_generator(model_string, quantized="FT_all" in args.model)
+    model, tokenizer = models.load_generator(model_string)
     kwargs.update({"apply_chat_template": tokenizer.apply_chat_template,
                   "system_msg": True})
 
@@ -46,7 +49,7 @@ def get_responses(case):
     elif args.decoding:
         constraints = helpers.flatten_list_of_lists([helpers.get_preferred_nrs(subcat, level) for subcat, level in zip(case['categories'], case['levels'])])
         classifiers = {nr: models.load_classifier(nr, "partial_sequences") for nr in constraints}
-        return [models.decoding(model, tokenizer, case['prompt'], constrained=True, classifiers=classifiers)]
+        return [models.decoding(model, tokenizer, case['prompt'], constrained=True, classifiers=classifiers, alpha=args.alpha)]
     else:
         return [models.decoding(model, tokenizer, case['prompt'], constrained=False)]
 
@@ -63,9 +66,13 @@ else:
 i = 0
 remaining_testset = testset[testset['responses'].apply(len)==0]
 max_rows = min(args.max_rows, len(remaining_testset))
-for idx, case in tqdm(remaining_testset.sample(frac=1.).iterrows(), total=max_rows):
+for idx, case in tqdm(remaining_testset.sample(frac=1., random_state=26).iterrows(), total=max_rows):
     if i >= max_rows: break
     i+=1
+    
+    start = time.time()
     responses = get_responses(case)
     testset.at[idx, 'responses'] = responses
+    if args.time: testset.at[idx, 'time'] = time.time() - start
+        
     testset.to_json(output_file)

@@ -5,11 +5,12 @@ data/egp_examples.json
 data/wow/
 data/toc.json
 data/egp_gpt35.json
+data/CEFR**
 **__pycache__**
 **cambridge.smille**
 cloud.txt
 **/.ipynb_checkpoints
 **slurm**
 **wandb**
-models/partial_sequences/
+models
 data/SFT_data*
