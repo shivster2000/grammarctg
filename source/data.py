@@ -2,12 +2,15 @@
 
 import pandas as pd
 from dotenv import load_dotenv
+load_dotenv()
 import os
+os.environ['CACHE_DIR'] = os.environ['FAST_CACHE_DIR'].replace("%SLURM_JOB_ID%", os.getenv('SLURM_JOB_ID')) # speed up model loading
+
 load_dotenv()
 import nltk
 nltk.download("punkt", download_dir=os.getenv('CACHE_DIR'))
 nltk.data.path.insert(0, os.getenv('CACHE_DIR'))
-from nltk.tokenize import sent_tokenize
+from nltk.tokenize import sent_tokenize, word_tokenize
 
 import re
 import random

@@ -90,6 +90,6 @@ for prime_nr in relevant['prime'].unique():
             cases['response'] = cases['response'].apply(helpers.parse_response, args=("B: ",))
             print(cases['response'])
             relevant.loc[(relevant['prime']==prime_nr) & (relevant['target']==nr),'num_simulated'] = len(cases)
-            relevant.loc[(relevant['prime']==prime_nr) & (relevant['target']==nr),f'num_success{level}'] = (models.probe_model(classifiers[nr], list(cases['response']))[0]>0.5).float().sum().item()
+            relevant.loc[(relevant['prime']==prime_nr) & (relevant['target']==nr),f'num_success_{level}'] = (models.probe_model(classifiers[nr], list(cases['response']))[0]>0.5).float().sum().item()
 
     relevant.reset_index(drop=True).to_json("../data/intervention/" + args.output_file + ".json")
