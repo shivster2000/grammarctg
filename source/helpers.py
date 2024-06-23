@@ -195,13 +195,34 @@ def describe_subcat_level(subcat, level):
     
 def get_prompt_task_2(item, apply_chat_template=None, unconstrained=False, system_msg=False):
     constraints = os.linesep.join([describe_subcat_level(subcat, level) for subcat, level in zip(item['categories'], item['levels'])])
-    instruction = f"Given the dialog, write a possible next turn of A that preferably uses the following grammar patterns in the response:"
+    instruction = f"Given the dialog, write a possible next turn of A that preferably uses the following grammatical items in the response:"
     instruction += f"\n{constraints}" if not unconstrained else "" 
     return get_messages(instruction, item, apply_chat_template, system_msg)
-
 
 def get_prompt_task_3(item, apply_chat_template=None, system_msg=False):
     next_speaker = "A" if len(item['context']) % 2 == 0 else "B"
     instruction = f"Given the dialog, write a possible next turn of {next_speaker} that uses grammatical items on CEFR level {item['level']}."
     return get_messages(instruction, item, apply_chat_template, system_msg)
 
+description = {
+    "C2": "Has a good command of idiomatic expressions and colloquialisms with awareness of connotative levels of meaning. Can convey finer shades of meaning precisely by using, with reasonable accuracy, a wide range of modification devices. Can backtrack and restructure around a difficulty so smoothly that the interlocutor is hardly aware of it.",
+    "C1": "Can express themselves fluently and spontaneously, almost effortlessly. Has a good command of a broad lexical repertoire allowing gaps to be readily overcome with circumlocutions. There is little obvious searching for expressions or avoidance strategies; only a conceptually difficult subject can hinder a natural, smooth flow of language.",
+    "B2": "Can interact with a degree of fluency and spontaneity that makes regular interaction, and sustained relationships with users of the target language, quite possible without imposing strain on either party. Can highlight the personal significance of events and experiences, and account for and sustain views clearly by providing relevant explanations and arguments.",
+    "B1": "Can communicate with some confidence on familiar routine and non-routine matters related to their interests and professional field. Can exchange, check and confirm information, deal with less routine situations and explain why something is a problem. Can express thoughts on more abstract, cultural topics such as films, books, music, etc.",
+    "A2": "Can interact with reasonable ease in structured situations and short conversations, provided the other person helps if necessary. Can manage simple, routine exchanges without undue effort; can ask and answer questions and exchange ideas and information on familiar topics in predictable everyday situations.",
+    "A1": "Can interact in a simple way but communication is totally dependent on repetition at a slower rate, rephrasing and repair. Can ask and answer simple questions, initiate and respond to simple statements in areas of immediate need or on very familiar topics."
+}
+
+def get_CEFR_prompt(item, apply_chat_template=None):
+    next_speaker = "A" if len(item['context']) % 2 == 0 else "B"
+    instruction = f"Given the dialog, write a possible next turn of {next_speaker} that an English learner on CEFR level {item['CEFR']} could produce:"
+    item = get_messages(instruction, item, apply_chat_template, False, next_speaker)
+    item['messages'] = [{"role": "system", "content": f"Only output {next_speaker}'s response using language on CEFR level {item['CEFR']}. This level is described as: {description[item['CEFR']]}"}] + item['messages']
+    item['prompt'] = apply_chat_template(item['messages'][:-1], tokenize=False, add_generation_prompt=True)
+    item['text'] = apply_chat_template(item['messages'], tokenize=False)
+    return item
+
+def parse_response(response, format="A: "):
+    if format in response:
+        return response[response.index(format)+len(format):]
+    return response

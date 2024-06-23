@@ -263,12 +263,12 @@ def load_generator(model_name= "mistralai/Mistral-7B-Instruct-v0.2", quantized=F
         tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
 
-def generate(model, tokenizer, prompts, eos_token_id=None, max_new_tokens=128, batch_size=32, verbose=False, skip_special_tokens=True, do_sample=False):
+def generate(model, tokenizer, prompts, eos_token_id=None, max_new_tokens=128, batch_size=32, verbose=False, skip_special_tokens=True, do_sample=False, repetition_penalty=1.0, length_penalty=1.0, num_beams=1):
     """
     This generates tokens and returns the decoded and extracted response to the dialog generation task
     """
     tokenizer.padding_side = "left"
-    if eos_token_id == None: eos_token_id = tokenizer.eos_token_id
+    if eos_token_id == None: eos_token_id = [tokenizer.eos_token_id, tokenizer.convert_tokens_to_ids("<|eot_id|>")]
     model.eval()
     outputs = []
     for i in tqdm(range(0, len(prompts), batch_size), total=math.ceil(len(prompts)/batch_size), desc="Generate"):
@@ -282,7 +282,10 @@ def generate(model, tokenizer, prompts, eos_token_id=None, max_new_tokens=128, b
                                        eos_token_id=eos_token_id,
                                        do_sample=do_sample,
                                        temperature=0.6 if do_sample else None,
-                                       top_p=0.9 if do_sample else None)
+                                       top_p=0.9 if do_sample else None,
+                                       repetition_penalty=repetition_penalty,
+                                       length_penalty=length_penalty,
+                                       num_beams=num_beams)
         
         outputs += tokenizer.batch_decode(token_ids[:,model_input['input_ids'].shape[1]:],
                                           skip_special_tokens=skip_special_tokens,
