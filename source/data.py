@@ -19,7 +19,7 @@ from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader, random_split
 import json
 
-DATA_DIR ="../data/"
+DATA_DIR ="../data/dialogs/"
 DATASET_NAMES = ["DialogSum", "DailyDialog", "WoW", "CMUDoG", "ToC"]
 
 def flatten_list_of_lists(list_of_lists):
@@ -159,10 +159,10 @@ def get_mixed_sentences(n_per_corpus=1000, corpora = [DailyDialog, DialogSum, Wo
     for i, corpus in tqdm(enumerate(corpora), total=len(corpora)):
         corpus_inst = corpus()
         corpus_sents = corpus_inst.get_all_sentences()
-        if shuffle: random.shuffle(corpus_sents)
-        sentences += set(corpus_sents)
+        sentences += corpus_sents
         sentences = sentences[:(i+1)*n_per_corpus]
-    return sentences
+    if shuffle: random.shuffle(sentences)
+    return list(set(sentences))
 
 def get_dialog_data(dataset_names=DATASET_NAMES):
     dialogs = []

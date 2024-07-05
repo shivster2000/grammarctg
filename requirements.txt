@@ -107,7 +107,6 @@ coverage==7.2.3
 crashtest==0.3.1
 croniter==1.4.1
 cryptography==40.0.2
-cuda-python @ file:///scratch/tmp.23201236.sfux/cuda-python-11.8.2
 cufflinks==0.17.3
 cupy-cuda11x==12.0.0
 cutadapt==4.4
@@ -152,7 +151,6 @@ entrypoints==0.4
 envisage==7.0.3
 ephem==4.1.4
 esda==2.4.3
-esmpy @ file:///scratch/tmp.23170825.sfux/esmf-8.5.0/src/addon/esmpy
 et-xmlfile==1.1.0
 etils==1.3.0
 eventlet==0.33.3

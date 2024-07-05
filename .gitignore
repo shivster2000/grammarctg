@@ -2,8 +2,8 @@
 data/DuoLingoSLAM
 data/EFCAMDAT_Database.xml
 data/egp_examples.json
-data/wow/
-data/toc.json
+data/dialogs/wow/
+data/dialogs/toc.json
 data/egp_gpt35.json
 data/CEFR**
 **__pycache__**

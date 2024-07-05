@@ -162,10 +162,11 @@ def train(model, train_dataloader, val_dataloader, num_epochs=3, lr=1e-4, criter
     """
     if optimizer is None: optimizer = torch.optim.AdamW(model.parameters(), lr)
     last_val_loss = 2
-    for epoch in tqdm(range(num_epochs if num_epochs else 100), leave=leave):
+    epochs = range(num_epochs if num_epochs else 100)
+    for epoch in tqdm(epochs, leave=leave) if verbose else epochs:
         model.train()
         total_loss = 0
-        for batch in tqdm(train_dataloader) if verbose else train_dataloader:
+        for batch in train_dataloader:
             input_ids, attention_mask, labels = (batch['input_ids'].to(device), batch['attention_mask'].to(device), batch['labels'].to(device))
             outputs, _ = model(input_ids, attention_mask)
             loss = criterion(outputs, labels.float())

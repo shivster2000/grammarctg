@@ -131,7 +131,7 @@ def flatten_list_of_lists(list_of_lists):
     return [item for sublist in list_of_lists for item in sublist]
 
 def get_existing_classifiers(dir="corpus_training"):
-    return [int(name.replace(".pth","")) for name in os.listdir(f"../models/{dir}")]
+    return [int(name.replace(".pth","")) for name in os.listdir(f"../models/{dir}") if ".pth" in name]
 
 def get_high_conf_classifiers(threshold=0.8):
     coded_instances = pd.read_json('../data/corpus_validation_hits.json')
