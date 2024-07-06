@@ -28,7 +28,7 @@ def calculate_distinct_n(texts, n=2):
 
 class GrammarDetection():
     def __init__(self, dir="corpus_training", skill_nrs=None):
-        if skill_nrs is None: skill_nrs = [int(name.replace(".pth","")) for name in os.listdir(f"../models/{dir}")]
+        if skill_nrs is None: skill_nrs = helpers.get_existing_classifiers(dir)
         self.classifiers = {nr: models.load_classifier(nr, dir) for nr in skill_nrs}
 
     def score_texts(self, sentences, constraints=None):
