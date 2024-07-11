@@ -136,7 +136,9 @@ def get_existing_classifiers(dir="corpus_training"):
 def get_high_conf_classifiers(threshold=0.8):
     coded_instances = pd.read_json('../data/corpus_validation_hits.json')
     correct_per_rule = coded_instances.groupby('#')['correct'].mean()
-    return list((correct_per_rule[correct_per_rule>=threshold].index))
+    high_confs = list((correct_per_rule[correct_per_rule>=threshold].index))
+    existing = get_existing_classifiers()
+    return [nr for nr in high_confs if nr in existing]
 
 def sample_dialog_snippet(dialog_data, n=5):
     dialog = []
