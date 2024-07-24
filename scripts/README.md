@@ -1,0 +1,22 @@
+# Script Descriptions
+
+- `CEFR_baseline.py`: Prompts Llama3 to create responses to random dialogs on a certain CEFR level.
+- `classify_corpus.py`: Annotate skills in a dialog corpus with all available grammar skill detectors.
+- `CV_detectors.py`: Cross-validates the performance for grammar detectors trained on synthetic data.
+- `evaluate_task1.py`: Evaluates the performance of task 1, aiming for explicit grammar constraints.
+- `evaluate_task2.py`: Evaluates the performance of task 2, aiming for categorical grammar constraints.
+- `evaluate_task3.py`: Evaluates the performance of task 3, aiming for grammar on a proficiency level.
+- `generate_responses_task1.py`: Generates responses for task 1 for all approaches, depending on the configuration.
+- `generate_responses_task2.py`: Generates responses for task 2 for all approaches, depending on the configuration.
+- `generate_responses_task3.py`: Generates responses for task 3 for all approaches, depending on the configuration.
+- `generate_test_data_task1.py`: Creates test data for evaluating task 1.
+- `generate_test_data_task2.py`: Creates test data for evaluating task 2.
+- `generate_test_data_task3.py`: Creates test data for evaluating task 3.
+- `run_script.sh`: A shell script to configure the environment for batch jobs.
+- `SFT_all_constraints.py`: Supervised fine-tuning on all present grammar skills from the annotated corpus.
+- `SFT_CEFR_dialogs.py`: Supervised fine-tuning of a language model on CEFR-labeled dialogs.
+- `SFT_CEFR_text.py`: Supervised fine-tuning of a language model on CEFR-labeled student writings.
+- `SFT_single_constraint.py`: Supervised fine-tuning for single grammar constraints from the annotated corpus.
+- `SFT_task1.py`: Supervised fine-tuning of a language model with the prompt for task 1.
+- `simulate_intervention.py`: Simulates grammar-controlled response intervention on different proficiency levels.
+- `transform_CEFR_data.py`: Transforms CEFR-labeled text into the dialog format.
