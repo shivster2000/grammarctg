@@ -4,7 +4,7 @@ data/EFCAMDAT_Database.xml
 data/egp_examples.json
 data/dialogs/wow/
 data/dialogs/toc.json
-data/egp_gpt35.json
+data/detection/egp_gpt35.json
 data/CEFR**
 **__pycache__**
 **cambridge.smille**
@@ -13,4 +13,4 @@ cloud.txt
 **slurm**
 **wandb**
 models
-data/SFT_data*
+data/task1/SFT_data*
