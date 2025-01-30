@@ -72,7 +72,7 @@ def get_single_response_metric(metric, context, response):
     score_backoff = 0
     while gpt_score == -1 and score_backoff < 2:
         responses = api.get_openai_chat_completion(
-            model="gpt-3.5-turbo",
+            model="gpt-4o",
             temperature=0.0,
             max_tokens=20,
             messages=[
