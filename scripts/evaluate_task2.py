@@ -34,7 +34,7 @@ for model in args.models:
     else:
         testset = pd.read_json(output_file)
             
-    condition = (testset['responses'].apply(len)>0) #& testset['Relevance'].isna()
+    condition = (testset['responses'].apply(len)>0) & testset['Relevance'].isna()
     subset = testset[condition]
     max_rows = min(args.max_rows, len(subset))
     i = 0
